@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Life Monitoring — 综合分析</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+
+<header class="app-header">
+  <span class="logo">🩺</span>
+  <div style="flex:1">
+    <h1>Life Monitoring</h1>
+    <p>多模态健康分析系统 · 集成面部、声学多维度小模型</p>
+  </div>
+  <nav class="header-nav">
+    <a href="/" class="nav-link active">综合分析</a>
+    <a href="/preprocessing" class="nav-link">数据预处理</a>
+    <a href="/age-timeline" class="nav-link">年龄时间线</a>
+  </nav>
+</header>
+
+<div class="main-layout">
+
+  <!-- ── Left: Inputs ─────────────────────────────────────── -->
+  <div class="left-panel">
+
+    <div class="card">
+      <div class="card-title"><span class="icon">🖼</span>面部图片</div>
+      <div class="upload-zone" id="imageZone">
+        <input type="file" id="imageInput" accept="image/*" />
+        <div class="upload-icon">📷</div>
+        <div class="upload-label">点击或拖拽上传</div>
+        <div class="upload-hint">JPG / PNG，建议正面清晰照片</div>
+        <div class="preview-name" id="imageFileName"></div>
+      </div>
+      <img class="img-preview" id="imagePreview" alt="face preview" />
+    </div>
+
+    <div class="card">
+      <div class="card-title"><span class="icon">🔊</span>语音录音</div>
+      <div class="upload-zone" id="audioZone">
+        <input type="file" id="audioInput" accept="audio/*" />
+        <div class="upload-icon">🔊</div>
+        <div class="upload-label">点击或拖拽上传</div>
+        <div class="upload-hint">WAV / M4A，建议持续元音 ≥3 秒</div>
+        <div class="preview-name" id="audioFileName"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title"><span class="icon">🎂</span>实际年龄</div>
+      <div class="age-row">
+        <label for="ageInput">年龄</label>
+        <input type="number" id="ageInput" value="50" min="0" max="120" />
+        <span style="font-size:14px;color:var(--muted)">岁</span>
+      </div>
+    </div>
+
+    <button class="btn-run" id="runBtn">
+      <span id="runBtnIcon">▶</span>
+      <span id="runBtnText">开始分析</span>
+    </button>
+
+  </div>
+
+  <!-- ── Right: Modules + Results + Prompt ─────────────────── -->
+  <div class="right-panel">
+
+    <div class="card">
+      <div class="card-title"><span class="icon">⚙️</span>分析模块</div>
+      <div class="modules-grid" id="modulesGrid">
+        <!-- Populated by JS -->
+      </div>
+    </div>
+
+    <!-- Results (shown after analysis) -->
+    <div class="results-section" id="resultsSection">
+      <div class="card">
+        <div class="card-title"><span class="icon">📊</span>检测结果</div>
+        <div class="result-grid" id="resultGrid"></div>
+      </div>
+    </div>
+
+    <!-- Prompt — always visible, directly editable -->
+    <div class="card prompt-section">
+      <div class="prompt-toolbar">
+        <div class="prompt-title-group">
+          <span class="section-title">📝 综合提示词</span>
+          <span class="prompt-edit-hint">（可直接在此编辑）</span>
+        </div>
+        <button class="btn-sm" id="editTemplateBtn">✏️ 编辑模板</button>
+        <button class="btn-sm primary" id="copyPromptBtn">📋 复制提示词</button>
+      </div>
+      <textarea id="promptTextarea" spellcheck="false"
+        placeholder="运行分析后，提示词将自动填入；也可在此直接手动编写…"></textarea>
+    </div>
+
+  </div>
+</div>
+
+<!-- ── Template editor modal ─────────────────────────────── -->
+<div class="modal-backdrop" id="templateModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h2>编辑提示词模板</h2>
+      <button class="modal-close" id="closeModalBtn">✕</button>
+    </div>
+    <div class="modal-body">
+      <p style="font-size:12px;color:var(--muted);margin-bottom:12px;">
+        使用 Jinja2 语法。可用变量：<code>{{ age }}</code>、
+        <code>{{ faceage.summary }}</code>、<code>{{ facettd.outputs.time_to_death_years }}</code>
+        等。保存后立即生效（下次分析时应用）。
+      </p>
+      <textarea id="templateEditorArea" spellcheck="false"></textarea>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-sm" id="cancelModalBtn">取消</button>
+      <button class="btn-sm primary" id="saveTemplateBtn">💾 保存模板</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script src="/static/main.js"></script>
+</body>
+</html>

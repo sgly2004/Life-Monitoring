@@ -1,0 +1,204 @@
+# Sub-module registry
+# Each entry describes a module's metadata shown in the web UI.
+
+modules:
+  - id: faceage
+    name: 面部生物年龄预测
+    name_en: FaceAge
+    python_exe: module/FaceAge/.venv312/bin/python
+    description: 使用深度卷积神经网络（FaceNet 架构）从面部照片估计生物年龄，与实际年龄的差异可反映整体健康状况和衰老速度。
+    enabled_default: true
+    inputs:
+      - name: 面部图片
+        type: image
+        required: true
+        note: 清晰正面照片，支持 JPG/PNG
+    outputs:
+      - name: 生物年龄
+        type: number
+        unit: 岁
+      - name: 人脸检测置信度
+        type: number
+    model_info: "FaceNet-based CNN，在 ~1万 名晚期癌症患者影像上训练，MAE ≈ 4.1 岁（≥40 岁人群）"
+    run_script: module/FaceAge/run.py
+
+  - id: facettd
+    name: 面部死亡时间预测
+    name_en: FaceTTD
+    description: 结合面部图像特征（4096 维灰度向量）和年龄，使用 XGBoost/RandomForest 回归模型预测剩余寿命（TTD，Time To Death）。
+    enabled_default: true
+    inputs:
+      - name: 面部图片
+        type: image
+        required: true
+      - name: 实际年龄
+        type: number
+        required: true
+        range: [0, 120]
+    outputs:
+      - name: 预测剩余寿命
+        type: number
+        unit: 年
+      - name: 预期寿命
+        type: number
+        unit: 岁
+    model_info: "XGBoost / Random Forest 回归，图像特征 4096 维 + 年龄标准化"
+    run_script: module/facettd/run.py
+
+  - id: parkinsons
+    name: 帕金森声学检测
+    name_en: Parkinsons
+    description: 从 WAV 语音录音中提取 22 个声学特征（基频、Jitter、Shimmer、HNR/NHR、RPDE、DFA、PPE 等），使用 XGBoost 分类器检测帕金森病风险。
+    enabled_default: true
+    inputs:
+      - name: 语音录音
+        type: audio
+        required: true
+        format: WAV
+        note: 建议使用持续元音发声（如"啊"）录音，时长 ≥3 秒
+    outputs:
+      - name: 诊断结果
+        type: string
+        values: [正常, 疑似帕金森]
+      - name: 帕金森概率
+        type: number
+        range: [0, 1]
+      - name: 风险等级
+        type: string
+        values: [低风险, 中等风险, 高风险]
+    model_info: "XGBoost 分类器，在 UCI Parkinson 数据集（195 条）上训练，22 个 MDVP 声学特征"
+    run_script: module/Parkinsons/run.py
+
+  - id: lung_cancer
+    name: 早期肺癌语音检测
+    name_en: Lung Cancer
+    description: 从语音录音中提取时域、频域统计特征及 MFCC，使用 SVM + CNN + LSTM + Transformer 四模型集成投票检测早期肺癌。
+    enabled_default: true
+    inputs:
+      - name: 语音录音
+        type: audio
+        required: true
+        format: WAV
+        note: 需要预先运行 run_pipeline.py 完成模型训练
+    outputs:
+      - name: 综合判断
+        type: string
+      - name: 阳性模型数
+        type: number
+      - name: 各模型概率
+        type: object
+    model_info: "SVM(rbf) + CNN(Conv1d) + LSTM + Transformer，特征选择使用 FeatureWiz，4分类任务"
+    run_script: module/Early_Stage_Lung_Cancer_Detection_from_Speech_Sounds/run.py
+
+  - id: skin_disease
+    name: 皮肤病检测
+    name_en: SkinDisease
+    python_exe: module/SkinDisease/.venv/bin/python
+    description: 基于 EfficientNetV2B0 深度卷积神经网络，从面部或皮肤照片检测 6 种常见皮肤病（痤疮、湿疹、皮肤癌、角化病、粟丘疹、酒糟鼻），可辅助初步筛查与健康评估。
+    enabled_default: true
+    inputs:
+      - name: 皮肤图片
+        type: image
+        required: true
+        note: 清晰皮肤病灶照片或面部照片，支持 JPG/PNG
+    outputs:
+      - name: 诊断结果
+        type: string
+        values: [酒糟鼻（玫瑰痤疮）, 粟丘疹（白头）, 角化病（脂溢性角化病）, 湿疹, 皮肤癌（鳞状/基底细胞癌）, 痤疮]
+      - name: 置信度
+        type: number
+        range: [0, 1]
+      - name: 严重程度
+        type: string
+        values: [低风险, 中等风险, 高风险]
+    model_info: "EfficientNetV2B0（ImageNet 预训练，微调），测试准确率 95.6%，6 类分类"
+    run_script: module/SkinDisease/run.py
+
+  - id: mental_health
+    name: 心理状态检测
+    name_en: MentalHealth
+    description: 基于面部表情识别（FER）分析7种基本情绪（生气、厌恶、恐惧、开心、悲伤、惊讶、中性），结合情绪分布熵计算心理健康评分（0-100），评估心理风险等级与情绪状态。需要在 CUDA 服务器上训练模型。
+    enabled_default: false
+    inputs:
+      - name: 面部图片
+        type: image
+        required: true
+        note: 清晰正面人脸照片，支持 JPG/PNG
+      - name: 实际年龄
+        type: number
+        required: false
+        range: [0, 120]
+    outputs:
+      - name: 主导情绪
+        type: string
+        values: [生气, 厌恶, 恐惧, 开心, 悲伤, 惊讶, 中性]
+      - name: 情绪置信度
+        type: number
+        range: [0, 1]
+      - name: 心理健康评分
+        type: number
+        range: [0, 100]
+        unit: 分
+      - name: 风险等级
+        type: string
+        values: [低风险, 中等风险, 高风险]
+      - name: 情绪状态
+        type: string
+    model_info: "Swin Transformer Base（swin_base_patch4_window7_224），FER2013 数据集，支持 CUDA 训练/CPU 推理"
+    run_script: module/MentalHealth/run.py
+
+  - id: facetrack
+    name: 视频人脸切分
+    name_en: FaceTrack
+    description: 基于 facenet-pytorch（InceptionResnetV1 + MTCNN）人脸嵌入向量比对，从完整视频中自动切分出指定人物的片段序列，支持 Apple Silicon GPU 加速。
+    enabled_default: false
+    inputs:
+      - name: 参考人脸照片
+        type: image
+        required: true
+        note: 目标人物清晰正面照，支持 JPG/PNG
+      - name: 视频文件
+        type: file
+        required: true
+        note: 支持 MP4/AVI/MOV 等常见格式
+    outputs:
+      - name: 切分片段
+        type: array
+        description: 每个片段包含 start_time, end_time, duration, confidence
+      - name: 片段数量
+        type: number
+      - name: 总时长
+        type: number
+        unit: 秒
+      - name: 目标身份
+        type: string
+    model_info: "MTCNN 人脸检测 + InceptionResnetV1（VGGFace2 预训练）512维嵌入，MPS/CUDA/CPU 自动选择"
+    run_script: module/FaceTrack/run.py
+
+  - id: voicetrack
+    name: 音频声纹切分
+    name_en: VoiceTrack
+    description: 基于 pyannote-audio 说话人分割 + resemblyzer 声纹嵌入比对，从完整音频中提取目标说话人的所有片段，支持 Apple Silicon GPU 加速。
+    enabled_default: false
+    inputs:
+      - name: 参考语音
+        type: audio
+        required: true
+        note: 目标说话人清晰语音，建议至少 1 秒
+      - name: 音频文件
+        type: audio
+        required: true
+        note: 支持 WAV/MP3/M4A 等格式
+    outputs:
+      - name: 切分片段
+        type: array
+        description: 每个片段包含 start_time, end_time, duration, confidence
+      - name: 片段数量
+        type: number
+      - name: 总时长
+        type: number
+        unit: 秒
+      - name: 目标说话人
+        type: string
+    model_info: "pyannote/speaker-diarization-3.1 说话人分割 + resemblyzer VoiceEncoder 256维嵌入，MPS/CUDA/CPU 自动选择"
+    run_script: module/VoiceTrack/run.py

@@ -1,0 +1,642 @@
+"""
+Life Monitoring — FastAPI web backend
+
+Endpoints:
+  GET  /                        Serve index.html (综合分析)
+  GET  /preprocessing           Serve preprocessing.html (数据预处理)
+  GET  /age-timeline            Serve age_timeline.html
+  GET  /api/modules             List all module metadata
+  POST /api/analyze             Run analysis (multipart form)
+  POST /api/faceage-batch       Batch FaceAge prediction (multiple images)
+  GET  /api/config/template     Get current prompt template
+  PUT  /api/config/template     Save updated prompt template
+  POST /api/split/face          FaceTrack — split video by reference face
+  POST /api/split/voice         VoiceTrack — split audio by reference voice
+  POST /api/face-split          FaceTrack (frontend-facing, field: reference_image)
+  POST /api/voice-split         VoiceTrack (frontend-facing, field: reference_audio)
+
+Start:
+  uvicorn web.app:app --reload --port 8000
+"""
+from __future__ import annotations
+import concurrent.futures
+import json as _json
+import os
+import sys
+import shutil
+import uuid
+from pathlib import Path
+from typing import List, Optional
+
+from fastapi import FastAPI, File, Form, UploadFile, HTTPException
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
+import yaml
+
+ROOT_DIR = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT_DIR))
+
+from core.orchestrator import orchestrate, load_prompt_template, save_prompt_template
+
+app = FastAPI(title="Life Monitoring", version="1.0.0")
+
+STATIC_DIR = Path(__file__).parent / "static"
+UPLOADS_DIR = ROOT_DIR / "uploads"
+MODULES_CONFIG = ROOT_DIR / "config" / "modules.yaml"
+UPLOADS_DIR.mkdir(exist_ok=True)
+
+app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+
+
+# ── Routes ────────────────────────────────────────────────────────────────────
+
+@app.get("/", include_in_schema=False)
+async def index():
+    return FileResponse(str(STATIC_DIR / "index.html"))
+
+
+@app.get("/preprocessing", include_in_schema=False)
+async def preprocessing():
+    return FileResponse(str(STATIC_DIR / "preprocessing.html"))
+
+
+@app.get("/age-timeline", include_in_schema=False)
+async def age_timeline():
+    return FileResponse(str(STATIC_DIR / "age_timeline.html"))
+
+
+@app.get("/api/modules")
+async def get_modules():
+    """Return module registry from config/modules.yaml."""
+    with open(MODULES_CONFIG, encoding="utf-8") as f:
+        cfg = yaml.safe_load(f)
+    return cfg.get("modules", [])
+
+
+@app.get("/api/config/template")
+async def get_template():
+    """Return the current prompt template string."""
+    return {"template": load_prompt_template()}
+
+
+class TemplateUpdate(BaseModel):
+    template: str
+
+
+@app.put("/api/config/template")
+async def update_template(body: TemplateUpdate):
+    """Persist an updated prompt template."""
+    try:
+        save_prompt_template(body.template)
+        return {"status": "saved"}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.post("/api/analyze")
+async def analyze(
+    age: int = Form(...),
+    enabled_modules: str = Form(...),   # JSON array string, e.g. '["faceage","parkinsons"]'
+    image: Optional[UploadFile] = File(None),
+    audio: Optional[UploadFile] = File(None),
+    prompt_override: Optional[str] = Form(None),
+):
+    """
+    Run the enabled modules against the uploaded files.
+
+    Form fields:
+      age              int
+      enabled_modules  JSON-encoded list of module IDs
+      image            optional face image file
+      audio            optional audio file (WAV/M4A)
+      prompt_override  optional Jinja2 template string to use instead of saved one
+    """
+    import json as _json
+
+    try:
+        modules: List[str] = _json.loads(enabled_modules)
+    except Exception:
+        raise HTTPException(status_code=422, detail="enabled_modules must be a JSON array")
+
+    session_id = str(uuid.uuid4())[:8]
+    session_dir = UPLOADS_DIR / session_id
+    session_dir.mkdir(parents=True, exist_ok=True)
+
+    image_path: Optional[str] = None
+    audio_path: Optional[str] = None
+
+    try:
+        if image and image.filename:
+            suffix = Path(image.filename).suffix or ".jpg"
+            img_file = session_dir / f"face{suffix}"
+            with open(img_file, "wb") as f:
+                shutil.copyfileobj(image.file, f)
+            image_path = str(img_file)
+
+        if audio and audio.filename:
+            suffix = Path(audio.filename).suffix or ".wav"
+            aud_file = session_dir / f"audio{suffix}"
+            with open(aud_file, "wb") as f:
+                shutil.copyfileobj(audio.file, f)
+            audio_path = str(aud_file)
+
+        result = orchestrate(
+            enabled_modules=modules,
+            image_path=image_path,
+            audio_path=audio_path,
+            age=age,
+            prompt_override=prompt_override if prompt_override else None,
+        )
+
+        return JSONResponse(content=result)
+
+    finally:
+        # Clean up uploaded files after response
+        try:
+            shutil.rmtree(session_dir, ignore_errors=True)
+        except Exception:
+            pass
+
+
+@app.post("/api/faceage-batch")
+async def faceage_batch(files: List[UploadFile] = File(...)):
+    """
+    Batch FaceAge prediction for multiple face images.
+
+    Accepts any number of image files (e.g. from a folder upload).
+    Runs all images in a single subprocess call (model loaded once).
+
+    Returns list of:
+      { filename, status, biological_age, detection_confidence, error }
+    sorted by natural filename order.
+    """
+    import re
+    import subprocess
+
+    if not files:
+        raise HTTPException(status_code=422, detail="No files uploaded")
+
+    session_id = str(uuid.uuid4())[:8]
+    session_dir = UPLOADS_DIR / session_id
+    session_dir.mkdir(parents=True, exist_ok=True)
+
+    IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".bmp", ".webp", ".tiff", ".tif"}
+
+    try:
+        saved: list[tuple[str, Path]] = []   # (original_filename, saved_path)
+        for upload in files:
+            if not upload.filename:
+                continue
+            ext = Path(upload.filename).suffix.lower()
+            if ext not in IMAGE_EXTS:
+                continue
+            # Use original filename to preserve sort order
+            safe_name = upload.filename.replace("/", "_").replace("\\", "_")
+            dest = session_dir / safe_name
+            with open(dest, "wb") as f:
+                shutil.copyfileobj(upload.file, f)
+            saved.append((upload.filename, dest))
+
+        if not saved:
+            raise HTTPException(status_code=422, detail="No valid image files found")
+
+        # Natural sort: numbers inside filenames treated numerically
+        def _natural_key(item):
+            parts = re.split(r"(\d+)", Path(item[0]).stem)
+            return [int(p) if p.isdigit() else p.lower() for p in parts]
+
+        saved.sort(key=_natural_key)
+
+        image_paths = [str(p) for _, p in saved]
+        original_names = [name for name, _ in saved]
+
+        # Call FaceAge batch mode (model loaded once for all images)
+        from core.module_runner import _load_module_python_exes, ROOT_DIR
+        faceage_script = ROOT_DIR / "module" / "FaceAge" / "run.py"
+        exe = _load_module_python_exes().get("faceage") or sys.executable
+
+        proc = subprocess.run(
+            [exe, str(faceage_script)],
+            input=_json.dumps({"image_paths": image_paths}, ensure_ascii=False),
+            capture_output=True,
+            text=True,
+            timeout=600,
+            env={**os.environ, "PYTHONPATH": str(ROOT_DIR)},
+        )
+
+        # Parse the JSON array from stdout (skip debug lines)
+        json_line = None
+        for line in reversed(proc.stdout.strip().splitlines()):
+            line = line.strip()
+            if line.startswith("["):
+                json_line = line
+                break
+
+        if json_line is None:
+            stderr_tail = proc.stderr[-1500:] if proc.stderr else "(no stderr)"
+            raise RuntimeError(f"FaceAge 无输出。\nstderr:\n{stderr_tail}")
+
+        raw_results: list[dict] = _json.loads(json_line)
+
+        # Attach original filenames and flatten for the frontend
+        output = []
+        for orig_name, r in zip(original_names, raw_results):
+            output.append(
+                {
+                    "filename": orig_name,
+                    "status": r.get("status", "error"),
+                    "biological_age": r.get("outputs", {}).get("biological_age"),
+                    "detection_confidence": r.get("outputs", {}).get("detection_confidence"),
+                    "summary": r.get("summary", ""),
+                    "error": r.get("error"),
+                }
+            )
+
+        return JSONResponse(content={"results": output})
+
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+    finally:
+        shutil.rmtree(session_dir, ignore_errors=True)
+
+
+# ── Split Tool Endpoints ─────────────────────────────────────────────────────
+
+@app.post("/api/split/face")
+async def split_by_face(
+    video: UploadFile = File(...),
+    reference_face: UploadFile = File(...),
+    threshold: float = Form(0.70),
+):
+    """
+    FaceTrack — split a video by a reference face.
+
+    Form fields:
+      video            face video file (MP4/AVI/MOV)
+      reference_face   reference face image (JPG/PNG)
+      threshold        cosine similarity threshold (default 0.70)
+    """
+    import subprocess
+
+    session_id = str(uuid.uuid4())[:8]
+    session_dir = UPLOADS_DIR / session_id
+    session_dir.mkdir(parents=True, exist_ok=True)
+
+    try:
+        # Save uploaded files
+        video_ext = Path(video.filename).suffix.lower() if video.filename else ".mp4"
+        video_file = session_dir / f"video{video_ext}"
+        with open(video_file, "wb") as f:
+            shutil.copyfileobj(video.file, f)
+
+        ref_ext = Path(reference_face.filename).suffix.lower() if reference_face.filename else ".jpg"
+        ref_file = session_dir / f"reference{ref_ext}"
+        with open(ref_file, "wb") as f:
+            shutil.copyfileobj(reference_face.file, f)
+
+        # Prepare inputs
+        inputs = {
+            "video_path": str(video_file),
+            "reference_face_path": str(ref_file),
+            "threshold": float(threshold),
+        }
+
+        # Call FaceTrack module directly
+        from core.module_runner import _load_module_python_exes, ROOT_DIR as _root
+        facetrack_script = _root / "module" / "FaceTrack" / "run.py"
+        exe = _load_module_python_exes().get("facetrack") or sys.executable
+
+        proc = subprocess.run(
+            [exe, str(facetrack_script)],
+            input=_json.dumps(inputs, ensure_ascii=False),
+            capture_output=True,
+            text=True,
+            timeout=600,
+            env={**os.environ, "PYTHONPATH": str(_root)},
+        )
+
+        # Parse result
+        stdout = proc.stdout.strip()
+        json_line = None
+        for line in reversed(stdout.splitlines()):
+            line = line.strip()
+            if line.startswith("{"):
+                json_line = line
+                break
+
+        if json_line is None:
+            stderr_tail = proc.stderr[-2000:] if proc.stderr else "(empty)"
+            raise RuntimeError(f"FaceTrack 无输出。\nstderr:\n{stderr_tail}")
+
+        result: dict = _json.loads(json_line)
+        return JSONResponse(content=result)
+
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+    finally:
+        shutil.rmtree(session_dir, ignore_errors=True)
+
+
+@app.post("/api/split/voice")
+async def split_by_voice(
+    audio: UploadFile = File(...),
+    reference_audio: UploadFile = File(...),
+    threshold: float = Form(0.75),
+):
+    """
+    VoiceTrack — split an audio by a reference voice.
+
+    Form fields:
+      audio             full audio file (WAV/MP3/M4A)
+      reference_audio   reference voice sample (WAV/MP3/M4A)
+      threshold         cosine similarity threshold (default 0.75)
+    """
+    import subprocess
+
+    session_id = str(uuid.uuid4())[:8]
+    session_dir = UPLOADS_DIR / session_id
+    session_dir.mkdir(parents=True, exist_ok=True)
+
+    try:
+        # Save uploaded files
+        audio_ext = Path(audio.filename).suffix.lower() if audio.filename else ".wav"
+        audio_file = session_dir / f"audio{audio_ext}"
+        with open(audio_file, "wb") as f:
+            shutil.copyfileobj(audio.file, f)
+
+        ref_ext = Path(reference_audio.filename).suffix.lower() if reference_audio.filename else ".wav"
+        ref_file = session_dir / f"reference{ref_ext}"
+        with open(ref_file, "wb") as f:
+            shutil.copyfileobj(reference_audio.file, f)
+
+        # Prepare inputs
+        inputs = {
+            "audio_path": str(audio_file),
+            "reference_audio_path": str(ref_file),
+            "threshold": float(threshold),
+        }
+
+        # Call VoiceTrack module directly
+        from core.module_runner import _load_module_python_exes, ROOT_DIR as _root
+        voicetrack_script = _root / "module" / "VoiceTrack" / "run.py"
+        exe = _load_module_python_exes().get("voicetrack") or sys.executable
+
+        proc = subprocess.run(
+            [exe, str(voicetrack_script)],
+            input=_json.dumps(inputs, ensure_ascii=False),
+            capture_output=True,
+            text=True,
+            timeout=600,
+            env={**os.environ, "PYTHONPATH": str(_root)},
+        )
+
+        # Parse result
+        stdout = proc.stdout.strip()
+        json_line = None
+        for line in reversed(stdout.splitlines()):
+            line = line.strip()
+            if line.startswith("{"):
+                json_line = line
+                break
+
+        if json_line is None:
+            stderr_tail = proc.stderr[-2000:] if proc.stderr else "(empty)"
+            raise RuntimeError(f"VoiceTrack 无输出。\nstderr:\n{stderr_tail}")
+
+        result: dict = _json.loads(json_line)
+        return JSONResponse(content=result)
+
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+    finally:
+        shutil.rmtree(session_dir, ignore_errors=True)
+
+
+if __name__ == "__main__":
+    import uvicorn
+
+    uvicorn.run("web.app:app", host="0.0.0.0", port=8000, reload=True)
+
+
+# ── Frontend-facing split routes ──────────────────────────────────────────────
+# These mirror /api/split/face and /api/split/voice but use the field names
+# that the frontend (main.js) sends: reference_image/video and reference_audio/audio.
+
+@app.post("/api/face-split")
+async def face_split(
+    video: UploadFile = File(...),
+    reference_image: UploadFile = File(...),
+    threshold: float = Form(0.70),
+):
+    """
+    Frontend-facing wrapper for FaceTrack.
+    Forwards to /api/split/face after saving files.
+    """
+    import subprocess
+
+    session_id = str(uuid.uuid4())[:8]
+    session_dir = UPLOADS_DIR / session_id
+    session_dir.mkdir(parents=True, exist_ok=True)
+
+    try:
+        video_ext = Path(video.filename).suffix.lower() if video.filename else ".mp4"
+        video_file = session_dir / f"video{video_ext}"
+        with open(video_file, "wb") as f:
+            shutil.copyfileobj(video.file, f)
+
+        ref_ext = Path(reference_image.filename).suffix.lower() if reference_image.filename else ".jpg"
+        ref_file = session_dir / f"reference{ref_ext}"
+        with open(ref_file, "wb") as f:
+            shutil.copyfileobj(reference_image.file, f)
+
+        inputs = {
+            "video_path": str(video_file),
+            "reference_face_path": str(ref_file),
+            "threshold": float(threshold),
+        }
+
+        from core.module_runner import _load_module_python_exes, ROOT_DIR as _root
+        facetrack_script = _root / "module" / "FaceTrack" / "run.py"
+        exe = _load_module_python_exes().get("facetrack") or sys.executable
+
+        proc = subprocess.run(
+            [exe, str(facetrack_script)],
+            input=_json.dumps(inputs, ensure_ascii=False),
+            capture_output=True,
+            text=True,
+            timeout=600,
+            env={**os.environ, "PYTHONPATH": str(_root)},
+        )
+
+        stdout = proc.stdout.strip()
+        json_line = None
+        for line in reversed(stdout.splitlines()):
+            line = line.strip()
+            if line.startswith("{"):
+                json_line = line
+                break
+
+        if json_line is None:
+            stderr_tail = proc.stderr[-2000:] if proc.stderr else "(empty)"
+            raise RuntimeError(f"FaceTrack 无输出。\nstderr:\n{stderr_tail}")
+
+        raw: dict = _json.loads(json_line)
+        # Normalize to the format the frontend expects
+        return JSONResponse(content=_normalize_face_split_result(raw))
+
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+    finally:
+        shutil.rmtree(session_dir, ignore_errors=True)
+
+
+@app.post("/api/voice-split")
+async def voice_split(
+    audio: UploadFile = File(...),
+    reference_audio: UploadFile = File(...),
+    threshold: float = Form(0.75),
+):
+    """
+    Frontend-facing wrapper for VoiceTrack.
+    Forwards to /api/split/voice after saving files.
+    """
+    import subprocess
+
+    session_id = str(uuid.uuid4())[:8]
+    session_dir = UPLOADS_DIR / session_id
+    session_dir.mkdir(parents=True, exist_ok=True)
+
+    try:
+        audio_ext = Path(audio.filename).suffix.lower() if audio.filename else ".wav"
+        audio_file = session_dir / f"audio{audio_ext}"
+        with open(audio_file, "wb") as f:
+            shutil.copyfileobj(audio.file, f)
+
+        ref_ext = Path(reference_audio.filename).suffix.lower() if reference_audio.filename else ".wav"
+        ref_file = session_dir / f"reference{ref_ext}"
+        with open(ref_file, "wb") as f:
+            shutil.copyfileobj(reference_audio.file, f)
+
+        inputs = {
+            "audio_path": str(audio_file),
+            "reference_audio_path": str(ref_file),
+            "threshold": float(threshold),
+        }
+
+        from core.module_runner import _load_module_python_exes, ROOT_DIR as _root
+        voicetrack_script = _root / "module" / "VoiceTrack" / "run.py"
+        exe = _load_module_python_exes().get("voicetrack") or sys.executable
+
+        proc = subprocess.run(
+            [exe, str(voicetrack_script)],
+            input=_json.dumps(inputs, ensure_ascii=False),
+            capture_output=True,
+            text=True,
+            timeout=600,
+            env={**os.environ, "PYTHONPATH": str(_root)},
+        )
+
+        stdout = proc.stdout.strip()
+        json_line = None
+        for line in reversed(stdout.splitlines()):
+            line = line.strip()
+            if line.startswith("{"):
+                json_line = line
+                break
+
+        if json_line is None:
+            stderr_tail = proc.stderr[-2000:] if proc.stderr else "(empty)"
+            raise RuntimeError(f"VoiceTrack 无输出。\nstderr:\n{stderr_tail}")
+
+        raw: dict = _json.loads(json_line)
+        return JSONResponse(content=_normalize_voice_split_result(raw))
+
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+    finally:
+        shutil.rmtree(session_dir, ignore_errors=True)
+
+
+# ── Normalizers ─────────────────────────────────────────────────────────────
+
+def _normalize_face_split_result(raw: dict) -> dict:
+    """
+    Convert FaceTrack's UnifiedResult schema to the flat format
+    the frontend render function expects.
+    """
+    outputs = raw.get("outputs", {})
+    clips: list[dict] = outputs.get("clips", [])
+
+    segments = []
+    matched_count = 0
+    total_duration = 0.0
+
+    for clip in clips:
+        start = clip.get("start_time", 0)
+        end = clip.get("end_time", 0)
+        score = clip.get("confidence", 0.0)
+        is_match = True  # FaceTrack only returns clips that already passed the threshold
+
+        segments.append({
+            "start_time": f"{start:.1f}s",
+            "end_time":   f"{end:.1f}s",
+            "score":      round(score, 4),
+            "matched":    bool(is_match),
+        })
+        if is_match:
+            matched_count += 1
+            total_duration += (end - start)
+
+    return {
+        "total_segments":    len(clips),
+        "matched_segments": matched_count,
+        "total_duration":    f"{total_duration:.1f}s",
+        "segments":          segments,
+    }
+
+
+def _normalize_voice_split_result(raw: dict) -> dict:
+    """
+    Convert VoiceTrack's UnifiedResult schema to the flat format
+    the frontend render function expects.
+    """
+    outputs = raw.get("outputs", {})
+    clips: list[dict] = outputs.get("clips", [])
+
+    segments = []
+    matched_count = 0
+    total_duration = 0.0
+
+    for clip in clips:
+        start = clip.get("start_time", 0)
+        end = clip.get("end_time", 0)
+        score = clip.get("confidence", 0.0)
+        is_match = True  # VoiceTrack only returns clips that already passed the threshold
+
+        segments.append({
+            "start_time": f"{start:.1f}s",
+            "end_time":   f"{end:.1f}s",
+            "score":      round(score, 4),
+            "matched":    bool(is_match),
+        })
+        if is_match:
+            matched_count += 1
+            total_duration += (end - start)
+
+    return {
+        "total_segments":    len(clips),
+        "matched_segments": matched_count,
+        "total_duration":    f"{total_duration:.1f}s",
+        "segments":          segments,
+    }

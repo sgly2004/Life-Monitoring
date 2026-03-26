@@ -1,0 +1,5 @@
+facenet-pytorch>=2.5.0
+opencv-python
+numpy
+Pillow
+torch

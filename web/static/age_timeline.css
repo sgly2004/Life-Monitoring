@@ -1,0 +1,129 @@
+/* ── Nav ──────────────────────────────────────────────── */
+.header-nav {
+  display: flex; gap: 8px; align-items: center;
+}
+.nav-link {
+  padding: 7px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: rgba(255,255,255,.75);
+  text-decoration: none;
+  border: 1.5px solid rgba(255,255,255,.25);
+  transition: all .2s;
+}
+.nav-link:hover  { background: rgba(255,255,255,.15); color: #fff; }
+.nav-link.active { background: rgba(255,255,255,.2);  color: #fff;
+                   border-color: rgba(255,255,255,.5); }
+
+/* ── Layout ───────────────────────────────────────────── */
+.timeline-layout {
+  max-width: 1300px;
+  margin: 0 auto;
+  padding: 32px 24px;
+  display: grid;
+  grid-template-columns: 300px 1fr;
+  gap: 24px;
+  align-items: start;
+}
+
+.tl-left  { display: flex; flex-direction: column; gap: 20px; }
+.tl-right { display: flex; flex-direction: column; gap: 20px; }
+
+/* ── Drop zone extras ─────────────────────────────────── */
+.tl-dropzone { min-height: 160px; display: flex; flex-direction: column;
+               align-items: center; justify-content: center; }
+.tl-actions  { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap;
+               justify-content: center; }
+
+/* ── File list ────────────────────────────────────────── */
+.file-list {
+  display: flex; flex-direction: column; gap: 4px;
+  max-height: 280px; overflow-y: auto;
+  margin-top: 12px;
+}
+.file-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: var(--bg);
+  font-size: 12px;
+  color: var(--text-2);
+}
+.file-item .fi-thumb {
+  width: 32px; height: 32px; border-radius: 4px;
+  object-fit: cover; flex-shrink: 0;
+  border: 1px solid var(--border);
+}
+.file-item .fi-name  { flex: 1; word-break: break-all; }
+.file-item .fi-badge {
+  font-size: 10px; font-weight: 700; padding: 2px 6px;
+  border-radius: 10px; white-space: nowrap; flex-shrink: 0;
+}
+.fi-badge.pending { background: #F1F5F9; color: var(--muted); }
+.fi-badge.running { background: #EFF6FF; color: var(--primary); }
+.fi-badge.success { background: #D1FAE5; color: #065F46; }
+.fi-badge.error   { background: #FEE2E2; color: #991B1B; }
+
+/* ── Empty state ──────────────────────────────────────── */
+.empty-state {
+  text-align: center;
+  padding: 80px 40px;
+  background: var(--surface);
+  border-radius: var(--radius);
+  border: 1.5px dashed var(--border);
+}
+
+/* ── Chart ────────────────────────────────────────────── */
+.chart-card  { }
+.chart-wrapper { position: relative; height: 380px; }
+
+/* ── Table ────────────────────────────────────────────── */
+.tl-table-wrap { overflow-x: auto; }
+.tl-table {
+  width: 100%; border-collapse: collapse;
+  font-size: 13px;
+}
+.tl-table th {
+  text-align: left; padding: 10px 14px;
+  background: var(--bg); color: var(--text-2);
+  font-size: 11px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .5px;
+  border-bottom: 1.5px solid var(--border);
+}
+.tl-table td {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  vertical-align: middle;
+}
+.tl-table tbody tr:last-child td { border-bottom: none; }
+.tl-table tbody tr:hover { background: #F8FAFC; }
+.tl-table .age-cell {
+  font-size: 16px; font-weight: 800; color: var(--primary);
+}
+.tl-table .age-cell.error { color: var(--muted); }
+.tl-table .conf-bar {
+  display: flex; align-items: center; gap: 8px;
+}
+.tl-table .conf-track {
+  flex: 1; height: 6px; border-radius: 3px;
+  background: var(--border); overflow: hidden;
+}
+.tl-table .conf-fill {
+  height: 100%; border-radius: 3px;
+  background: linear-gradient(90deg, #10B981, #2563EB);
+  transition: width .4s;
+}
+.status-pill {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 3px 8px; border-radius: 20px;
+  font-size: 11px; font-weight: 600;
+}
+.status-pill.success { background: #D1FAE5; color: #065F46; }
+.status-pill.error   { background: #FEE2E2; color: #991B1B; }
+
+/* ── Responsive ───────────────────────────────────────── */
+@media (max-width: 900px) {
+  .timeline-layout { grid-template-columns: 1fr; }
+}

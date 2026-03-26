@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Life Monitoring — 数据预处理</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+
+<header class="app-header">
+  <span class="logo">🩺</span>
+  <div style="flex:1">
+    <h1>Life Monitoring</h1>
+    <p>多模态健康分析系统 · 集成面部、声学多维度小模型</p>
+  </div>
+  <nav class="header-nav">
+    <a href="/" class="nav-link">综合分析</a>
+    <a href="/preprocessing" class="nav-link active">数据预处理</a>
+    <a href="/age-timeline" class="nav-link">年龄时间线</a>
+  </nav>
+</header>
+
+<div class="main-layout">
+
+  <!-- ── Left: Tool Inputs ─────────────────────────────────── -->
+  <div class="left-panel">
+
+    <!-- Face Split Inputs -->
+    <div class="card">
+      <div class="card-title"><span class="icon">👤</span>人脸切分 (FaceTrack)</div>
+      <p class="tool-desc">
+        上传参考人脸照片和完整视频，自动提取目标人物出现的所有片段。
+      </p>
+
+      <div class="upload-zone" id="refFaceZone">
+        <input type="file" id="refFaceInput" accept="image/*" />
+        <div class="upload-icon">🪪</div>
+        <div class="upload-label">目标人物面部照片</div>
+        <div class="upload-hint">JPG / PNG，清晰正面照</div>
+        <div class="preview-name" id="refFaceFileName"></div>
+      </div>
+      <img class="img-preview" id="refFacePreview" alt="参考人脸" />
+
+      <div class="upload-zone" style="margin-top:12px;" id="splitVideoZone">
+        <input type="file" id="splitVideoInput" accept="video/*" />
+        <div class="upload-icon">🎬</div>
+        <div class="upload-label">完整视频</div>
+        <div class="upload-hint">MP4 / AVI / MOV</div>
+        <div class="preview-name" id="splitVideoFileName"></div>
+      </div>
+
+      <div class="threshold-row">
+        <label for="faceThreshold">
+          相似度阈值 <span id="faceThresholdVal" class="threshold-val">0.70</span>
+        </label>
+        <input type="range" id="faceThreshold" min="0.50" max="0.95" value="0.70" step="0.05" />
+        <div class="threshold-hint">越高越严格，建议 0.65~0.80</div>
+      </div>
+
+      <button class="btn-run" id="runFaceSplitBtn">
+        <span id="faceSplitIcon">▶</span>
+        <span id="faceSplitText">开始人脸切分</span>
+      </button>
+    </div>
+
+    <!-- Voice Split Inputs -->
+    <div class="card">
+      <div class="card-title"><span class="icon">🎙</span>声纹切分 (VoiceTrack)</div>
+      <p class="tool-desc">
+        上传参考语音样本和完整音频，自动提取目标说话人的所有片段。
+      </p>
+
+      <div class="upload-zone" id="refAudioZone">
+        <input type="file" id="refAudioInput" accept="audio/*" />
+        <div class="upload-icon">🎤</div>
+        <div class="upload-label">目标说话人语音</div>
+        <div class="upload-hint">WAV / MP3 / M4A，建议 ≥1 秒清晰语音</div>
+        <div class="preview-name" id="refAudioFileName"></div>
+      </div>
+
+      <div class="upload-zone" style="margin-top:12px;" id="splitAudioZone">
+        <input type="file" id="splitAudioInput" accept="audio/*" />
+        <div class="upload-icon">🔊</div>
+        <div class="upload-label">完整音频</div>
+        <div class="upload-hint">WAV / MP3 / M4A / FLAC</div>
+        <div class="preview-name" id="splitAudioFileName"></div>
+      </div>
+
+      <div class="threshold-row">
+        <label for="voiceThreshold">
+          相似度阈值 <span id="voiceThresholdVal" class="threshold-val">0.75</span>
+        </label>
+        <input type="range" id="voiceThreshold" min="0.50" max="0.95" value="0.75" step="0.05" />
+        <div class="threshold-hint">越高越严格，建议 0.70~0.85</div>
+      </div>
+
+      <button class="btn-run" id="runVoiceSplitBtn">
+        <span id="voiceSplitIcon">▶</span>
+        <span id="voiceSplitText">开始声纹切分</span>
+      </button>
+    </div>
+
+  </div>
+
+  <!-- ── Right: Results ────────────────────────────────────── -->
+  <div class="right-panel">
+
+    <!-- Face Split Results -->
+    <div class="card" id="faceSplitResultCard">
+      <div class="card-title"><span class="icon">📊</span>人脸切分结果</div>
+      <div class="split-empty-state" id="faceSplitEmpty">
+        <span class="split-empty-icon">👤</span>
+        <p>运行人脸切分后，片段时间线将显示在此处</p>
+      </div>
+      <div id="faceSplitResults" style="display:none;"></div>
+    </div>
+
+    <!-- Voice Split Results -->
+    <div class="card" id="voiceSplitResultCard">
+      <div class="card-title"><span class="icon">📊</span>声纹切分结果</div>
+      <div class="split-empty-state" id="voiceSplitEmpty">
+        <span class="split-empty-icon">🎙</span>
+        <p>运行声纹切分后，片段时间线将显示在此处</p>
+      </div>
+      <div id="voiceSplitResults" style="display:none;"></div>
+    </div>
+
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script src="/static/preprocessing.js"></script>
+</body>
+</html>

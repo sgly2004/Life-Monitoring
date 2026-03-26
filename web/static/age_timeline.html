@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>年龄时间线 — Life Monitoring</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <link rel="stylesheet" href="/static/age_timeline.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
+</head>
+<body>
+
+<header class="app-header">
+  <span class="logo">🩺</span>
+  <div style="flex:1">
+    <h1>Life Monitoring</h1>
+    <p>多模态健康分析系统 · 集成面部、声学多维度小模型</p>
+  </div>
+  <nav class="header-nav">
+    <a href="/" class="nav-link">综合分析</a>
+    <a href="/age-timeline" class="nav-link active">年龄时间线</a>
+  </nav>
+</header>
+
+<div class="timeline-layout">
+
+  <!-- ── Left: Upload panel ──────────────────────────── -->
+  <div class="tl-left">
+
+    <div class="card">
+      <div class="card-title"><span class="icon">📁</span>上传照片</div>
+
+      <!-- Drop zone -->
+      <div class="upload-zone tl-dropzone" id="dropZone">
+        <input type="file" id="fileInput" accept="image/*" multiple />
+        <input type="file" id="folderInput" accept="image/*" webkitdirectory style="display:none" />
+        <div class="upload-icon">🖼</div>
+        <div class="upload-label">点击选择多张照片</div>
+        <div class="upload-hint">或将照片文件夹拖拽到此处</div>
+        <div class="tl-actions">
+          <button class="btn-sm" id="selectFilesBtn">选择文件</button>
+          <button class="btn-sm" id="selectFolderBtn">选择文件夹</button>
+        </div>
+      </div>
+
+      <!-- File list -->
+      <div id="fileList" class="file-list"></div>
+    </div>
+
+    <button class="btn-run" id="runBtn" disabled>
+      <span id="runBtnIcon">▶</span>
+      <span id="runBtnText">开始预测</span>
+    </button>
+
+    <!-- Legend -->
+    <div class="card" id="legendCard" style="display:none">
+      <div class="card-title"><span class="icon">ℹ️</span>说明</div>
+      <p style="font-size:12px;color:var(--text-2);line-height:1.7">
+        FaceAge 模型基于约 1 万名晚期癌症患者临床影像训练，
+        估计<strong>生物年龄</strong>（非外貌年龄）。<br>
+        针对 ≥40 岁人群优化，平均误差约 4.1 岁。
+      </p>
+    </div>
+
+  </div>
+
+  <!-- ── Right: Chart + Table ────────────────────────── -->
+  <div class="tl-right">
+
+    <!-- Empty state -->
+    <div class="empty-state" id="emptyState">
+      <div style="font-size:64px">📊</div>
+      <div style="font-size:18px;font-weight:700;margin-top:16px;color:var(--text-2)">
+        上传照片后点击「开始预测」
+      </div>
+      <div style="font-size:13px;color:var(--muted);margin-top:8px">
+        支持 JPG / PNG，可选择单张、多张或整个文件夹
+      </div>
+    </div>
+
+    <!-- Chart -->
+    <div class="card chart-card" id="chartCard" style="display:none">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+        <div class="card-title" style="margin-bottom:0">
+          <span class="icon">📈</span>面部生物年龄趋势
+        </div>
+        <button class="btn-sm" id="exportBtn">⬇ 导出图表</button>
+      </div>
+      <div class="chart-wrapper">
+        <canvas id="ageChart"></canvas>
+      </div>
+    </div>
+
+    <!-- Results table -->
+    <div class="card" id="tableCard" style="display:none">
+      <div class="card-title"><span class="icon">📋</span>预测详情</div>
+      <div class="tl-table-wrap">
+        <table class="tl-table" id="resultsTable">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>文件名</th>
+              <th>生物年龄（岁）</th>
+              <th>检测置信度</th>
+              <th>状态</th>
+            </tr>
+          </thead>
+          <tbody id="tableBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script src="/static/age_timeline.js"></script>
+</body>
+</html>

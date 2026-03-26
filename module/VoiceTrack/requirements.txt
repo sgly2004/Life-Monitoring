@@ -1,0 +1,7 @@
+resemblyzer
+pyannote.audio>=3.0
+librosa
+pydub
+numpy
+torch
+torchaudio
