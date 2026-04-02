@@ -340,8 +340,33 @@
         </div>
       </div>
 
+      <!-- ② Complete profile (shown when profile is missing birth_date or anchors) -->
+      <div class="card" id="completeProfileCard" style="display:none">
+        <div class="card-title"><span class="num">②</span> 完善档案信息</div>
+        <div style="font-size:13px;color:#ef4444;margin-bottom:14px">
+          ⚠ 该人物档案不完整（缺少出生日期或锚点文件），请补充后才能上传视频进行分析。
+        </div>
+        <div class="fld">
+          <label>出生日期</label>
+          <input type="date" id="cpDob" />
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+          <div class="fld" style="margin-bottom:0">
+            <label>锚点照片</label>
+            <input type="file" id="cpFace" accept="image/*" />
+          </div>
+          <div class="fld" style="margin-bottom:0">
+            <label>锚点声音</label>
+            <input type="file" id="cpVoice" accept="audio/*,video/*" />
+          </div>
+        </div>
+        <button class="btn-run" style="margin-top:4px" onclick="completeProfile()">
+          保存档案信息
+        </button>
+      </div>
+
       <!-- ② Upload video(s) -->
-      <div class="card">
+      <div class="card" id="uploadCard" style="display:none">
         <div class="card-title"><span class="num">②</span> 上传视频</div>
 
         <div class="video-list" id="videoList"></div>
@@ -368,7 +393,7 @@
           <span id="runIcon">▶</span>
           <span id="runText">开始分析</span>
         </button>
-      </div>
+      </div><!-- /uploadCard -->
 
       <!-- Progress panel -->
       <div class="progress-panel" id="progressPanel">
@@ -432,19 +457,24 @@ function renderSidebar() {
     list.innerHTML = '<div style="padding:12px 8px;font-size:12px;color:#9ca3af">暂无档案，点击下方新建</div>';
     return;
   }
+  // Use data attributes + delegated click to avoid double-quote nesting in onclick
   list.innerHTML = subjects.map(s => `
     <div class="subject-item ${currentSubject?.subject_name === s.subject_name ? 'active' : ''}"
-         id="si_${esc(s.subject_name)}"
-         onclick="selectSubject(${JSON.stringify(s.subject_name)})">
+         data-name="${esc(s.subject_name)}">
       <img class="subject-avatar" src="/api/workflow/subjects/${encodeURIComponent(s.subject_name)}/anchor-face"
-           onerror="this.outerHTML='<div class=\\'subject-avatar placeholder\\'>🧑</div>'" />
+           onerror="this.style.display='none';this.nextElementSibling.style.display='flex'" />
+      <div class="subject-avatar placeholder" style="display:none">🧑</div>
       <div class="subject-info">
         <div class="subject-name">${esc(s.subject_name)}</div>
-        <div class="subject-dob">${s.birth_date ? 'DOB ' + s.birth_date : '无出生日期'}</div>
+        <div class="subject-dob">${s.birth_date ? 'DOB ' + s.birth_date : '⚠ 无出生日期'}</div>
         <div class="subject-cnt">${s.sample_count} 次采样</div>
       </div>
     </div>
   `).join('');
+  // Attach click handlers via JS (avoids HTML attribute quoting issues)
+  list.querySelectorAll('.subject-item').forEach(el => {
+    el.addEventListener('click', () => selectSubject(el.dataset.name));
+  });
 }
 
 async function selectSubject(name) {
@@ -474,11 +504,22 @@ function showSubjectContent(s) {
 
   const photo = document.getElementById('profilePhoto');
   const placeholder = document.getElementById('profilePhotoPlaceholder');
-  photo.src = `/api/workflow/subjects/${encodeURIComponent(s.subject_name)}/anchor-face?t=${Date.now()}`;
-  photo.style.display = '';
-  placeholder.style.display = 'none';
+  // Only set src when there is actually an anchor face stored
+  if (s.has_anchor_face) {
+    photo.src = `/api/workflow/subjects/${encodeURIComponent(s.subject_name)}/anchor-face?t=${Date.now()}`;
+    photo.style.display = '';
+    placeholder.style.display = 'none';
+  } else {
+    photo.style.display = 'none';
+    placeholder.style.display = 'flex';
+  }
 
   document.getElementById('resultLabel').textContent = s.subject_name;
+
+  // If profile is incomplete, show a warning + fill-in form instead of video upload
+  const incomplete = !s.birth_date || !s.has_anchor_face || !s.has_anchor_voice;
+  document.getElementById('completeProfileCard').style.display = incomplete ? '' : 'none';
+  document.getElementById('uploadCard').style.display = incomplete ? 'none' : '';
 
   // Reset chart to empty state if no samples yet
   if (s.sample_count === 0) {
@@ -538,6 +579,45 @@ async function createSubject() {
   }
 }
 
+// ─── complete existing profile ────────────────────────────────────────────
+async function completeProfile() {
+  if (!currentSubject) return;
+  const dob   = document.getElementById('cpDob').value;
+  const face  = document.getElementById('cpFace').files[0];
+  const voice = document.getElementById('cpVoice').files[0];
+
+  if (!dob)   return alert('请填写出生日期');
+  if (!face && !currentSubject.has_anchor_face)  return alert('请上传锚点照片');
+  if (!voice && !currentSubject.has_anchor_voice) return alert('请上传锚点声音');
+
+  const fd = new FormData();
+  fd.append('subject_name', currentSubject.subject_name);
+  fd.append('birth_date', dob);
+  // If no new file provided, re-fetch and re-post existing (server just overwrites)
+  if (face) fd.append('anchor_face', face);
+  else {
+    // Fetch existing anchor face and re-attach
+    const blob = await fetch(`/api/workflow/subjects/${encodeURIComponent(currentSubject.subject_name)}/anchor-face`)
+      .then(r => r.blob()).catch(() => null);
+    if (!blob) return alert('无法获取已有锚点照片，请重新上传');
+    fd.append('anchor_face', blob, 'anchor_face.jpg');
+  }
+  if (voice) fd.append('anchor_voice', voice);
+  else {
+    return alert('请上传锚点声音文件');
+  }
+
+  try {
+    const r = await fetch('/api/workflow/subjects', { method: 'POST', body: fd });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.detail || `HTTP ${r.status}`);
+    await loadSubjects();
+    selectSubject(currentSubject.subject_name);
+  } catch (e) {
+    alert('保存失败：' + e.message);
+  }
+}
+
 // ─── video rows ────────────────────────────────────────────────────────────
 function addVideoRow() {
   videoRowCount++;
@@ -573,7 +653,8 @@ function collectVideos() {
 // ─── analysis ─────────────────────────────────────────────────────────────
 function validate() {
   if (!currentSubject) return '请先在左侧选择人物';
-  if (!currentSubject.birth_date) return '该人物档案缺少出生日期';
+  if (!currentSubject.birth_date || !currentSubject.has_anchor_face || !currentSubject.has_anchor_voice)
+    return '请先完善上方的档案信息（出生日期 + 锚点照片 + 锚点声音）';
   const videos = collectVideos();
   if (!videos.length) return '请至少添加一条视频文件';
   for (const v of videos) if (!v.date) return '视频缺少拍摄日期';
