@@ -9,7 +9,7 @@ Data flow:
 """
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any, Optional
 
 from pydantic import BaseModel, Field
@@ -30,12 +30,28 @@ class AnchorInput(BaseModel):
             "and as the key that associates multiple video samples into one timeline."
         ),
     )
+    birth_date: Optional[date] = Field(
+        None,
+        description=(
+            "Date of birth of the target person (ISO format: YYYY-MM-DD). "
+            "When provided, age_at_capture for each VideoSample is automatically "
+            "computed as floor((captured_at.date() - birth_date).days / 365.25). "
+            "If not provided, VideoSample.age_at_capture must be supplied explicitly."
+        ),
+    )
     anchor_face_path: str = Field(
         ..., description="Path to a clear face image of the target person (JPG/PNG)."
     )
     anchor_voice_path: str = Field(
         ..., description="Path to a reference audio clip of the target person (WAV/MP3/M4A)."
     )
+
+    def compute_age(self, captured_at: datetime) -> Optional[int]:
+        """Return age in whole years at the given capture datetime, or None if birth_date is unset."""
+        if self.birth_date is None:
+            return None
+        delta_days = (captured_at.date() - self.birth_date).days
+        return max(0, int(delta_days / 365.25))
 
 
 class VideoSample(BaseModel):
@@ -45,12 +61,14 @@ class VideoSample(BaseModel):
     captured_at: datetime = Field(
         ..., description="Date/time when the video was recorded."
     )
-    age_at_capture: int = Field(
-        ...,
+    age_at_capture: Optional[int] = Field(
+        None,
         ge=0,
         description=(
             "Actual age of the subject (in years) at the time of recording. "
-            "Required by the facettd module as a direct input."
+            "Required by the facettd module as a direct input. "
+            "May be omitted when AnchorInput.birth_date is provided — "
+            "it will be computed automatically."
         ),
     )
 

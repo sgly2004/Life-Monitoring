@@ -471,17 +471,74 @@ async def list_subjects():
     return JSONResponse(content={"subjects": subjects})
 
 
+# ── Workflow: load persisted timeline ────────────────────────────────────────
+
+@app.get("/api/workflow/timeline/{subject_name}")
+async def get_timeline(subject_name: str):
+    """
+    Return the saved LifetimeTimeline for a subject, if it exists.
+    The timeline is stored at uploads/<subject_name>/timeline.json and is
+    updated every time a successful /api/workflow/analyze completes.
+    """
+    timeline_path = UPLOADS_DIR / subject_name / "timeline.json"
+    if not timeline_path.exists():
+        raise HTTPException(status_code=404, detail="该人物尚无历史时间轴数据")
+    try:
+        import json as _json
+        data = _json.loads(timeline_path.read_text(encoding="utf-8"))
+        return JSONResponse(content=data)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
 # ── Workflow: full lifetime-curve pipeline ────────────────────────────────────
+
+def _serialize_timeline(timeline) -> dict:
+    """Convert LifetimeTimeline to a JSON-serializable dict (no raw_analysis)."""
+    return {
+        "subject_name": timeline.subject_name,
+        "points": [
+            {
+                "captured_at": p.captured_at.isoformat(),
+                "age_at_capture": p.age_at_capture,
+                "remaining_life_estimate": p.remaining_life_estimate,
+                "uncertainty_low": p.uncertainty_low,
+                "uncertainty_high": p.uncertainty_high,
+                "key_factors": p.key_factors,
+                "summary": p.summary,
+            }
+            for p in timeline.sorted_points()
+        ],
+    }
+
+
+def _merge_timeline_dicts(existing: dict, new_points: list[dict]) -> dict:
+    """
+    Merge new timeline points into an existing timeline dict.
+    Points are keyed by their date (YYYY-MM-DD); newer runs overwrite same-day points.
+    Result is sorted ascending by date.
+    """
+    by_date: dict[str, dict] = {}
+    for pt in existing.get("points", []):
+        day = pt["captured_at"][:10]
+        by_date[day] = pt
+    for pt in new_points:
+        day = pt["captured_at"][:10]
+        by_date[day] = pt
+    merged = sorted(by_date.values(), key=lambda p: p["captured_at"])
+    return {"subject_name": existing.get("subject_name", ""), "points": merged}
+
 
 @app.post("/api/workflow/analyze")
 async def workflow_analyze(
     subject_name: str = Form(...),
     anchor_face: UploadFile = File(...),
     anchor_voice: UploadFile = File(...),
-    # Repeated fields for each video: videos[], dates[], ages[]
+    # birth_date replaces per-video age: one date for the whole person
+    birth_date: Optional[str] = Form(None),   # ISO: YYYY-MM-DD
+    # Repeated fields: one entry per video
     videos: List[UploadFile] = File(...),
-    dates: List[str] = Form(...),    # ISO date strings, one per video
-    ages: List[int] = Form(...),     # age_at_capture, one per video
+    dates: List[str] = Form(...),    # capture date per video (YYYY-MM-DD)
     include_skin_disease: bool = Form(False),
     face_threshold: float = Form(0.70),
     voice_threshold: float = Form(0.75),
@@ -493,22 +550,34 @@ async def workflow_analyze(
       subject_name         str   — unique name / ID for the person
       anchor_face          file  — reference face image (JPG/PNG)
       anchor_voice         file  — reference voice clip (WAV/MP3/M4A)
+      birth_date           str   — date of birth (YYYY-MM-DD); age is auto-computed
       videos               files — one or more dated video files
-      dates                strs  — ISO date string per video (e.g. "2024-03-15")
-      ages                 ints  — age_at_capture per video
+      dates                strs  — capture date per video (YYYY-MM-DD)
       include_skin_disease bool  — whether to run SkinDisease module (default False)
       face_threshold       float — FaceTrack similarity threshold (default 0.70)
       voice_threshold      float — VoiceTrack similarity threshold (default 0.75)
 
-    Returns LifetimeTimeline as JSON.
+    Returns LifetimeTimeline as JSON (merges with any previously saved timeline).
     """
-    from datetime import datetime as _dt
+    import json as _json
+    from datetime import datetime as _dt, date as _date
 
-    if len(videos) != len(dates) or len(videos) != len(ages):
+    if len(videos) != len(dates):
         raise HTTPException(
             status_code=422,
-            detail="videos, dates, and ages must have the same number of items",
+            detail="videos and dates must have the same number of items",
         )
+
+    # Parse birth_date
+    parsed_birth_date: Optional[_date] = None
+    if birth_date:
+        try:
+            parsed_birth_date = _date.fromisoformat(birth_date)
+        except ValueError:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Invalid birth_date format: '{birth_date}'. Use YYYY-MM-DD.",
+            )
 
     session_id = str(uuid.uuid4())[:8]
     session_dir = UPLOADS_DIR / f"__session_{session_id}"
@@ -533,13 +602,14 @@ async def workflow_analyze(
 
         anchor = AnchorInput(
             subject_name=subject_name,
+            birth_date=parsed_birth_date,
             anchor_face_path=str(face_path),
             anchor_voice_path=str(voice_path),
         )
 
         # Save video files and build VideoSample list
         video_samples: List[VideoSample] = []
-        for i, (video_upload, date_str, age) in enumerate(zip(videos, dates, ages)):
+        for i, (video_upload, date_str) in enumerate(zip(videos, dates)):
             vid_ext = Path(video_upload.filename).suffix.lower() if video_upload.filename else ".mp4"
             vid_path = session_dir / f"video_{i:02d}{vid_ext}"
             with open(vid_path, "wb") as f:
@@ -550,16 +620,25 @@ async def workflow_analyze(
             except ValueError:
                 raise HTTPException(
                     status_code=422,
-                    detail=f"Invalid date format for video {i}: '{date_str}'. Use ISO format (YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS).",
+                    detail=f"Invalid date format for video {i}: '{date_str}'. Use YYYY-MM-DD.",
+                )
+
+            # Auto-compute age from birth_date; require at least one of them
+            age_at_capture = anchor.compute_age(captured_at)
+            if age_at_capture is None:
+                raise HTTPException(
+                    status_code=422,
+                    detail="请提供出生日期（birth_date）以便自动计算拍摄时年龄",
                 )
 
             video_samples.append(VideoSample(
                 video_path=str(vid_path),
                 captured_at=captured_at,
-                age_at_capture=int(age),
+                age_at_capture=age_at_capture,
             ))
 
         # Run pipeline for each video (sequential to avoid OOM on large models)
+        import logging as _logging
         analyses = []
         for vs in video_samples:
             try:
@@ -576,7 +655,6 @@ async def workflow_analyze(
                 )
                 analyses.append(analysis)
             except Exception as exc:
-                import logging as _logging
                 _logging.getLogger(__name__).warning(
                     "Pipeline failed for video %s: %s", vs.video_path, exc
                 )
@@ -588,24 +666,34 @@ async def workflow_analyze(
             )
 
         timeline = build_timeline(subject_name=subject_name, analyses=analyses)
+        new_timeline_dict = _serialize_timeline(timeline)
 
-        # Serialize timeline (exclude raw_analysis for size)
-        timeline_dict = {
-            "subject_name": timeline.subject_name,
-            "points": [
-                {
-                    "captured_at": p.captured_at.isoformat(),
-                    "age_at_capture": p.age_at_capture,
-                    "remaining_life_estimate": p.remaining_life_estimate,
-                    "uncertainty_low": p.uncertainty_low,
-                    "uncertainty_high": p.uncertainty_high,
-                    "key_factors": p.key_factors,
-                    "summary": p.summary,
-                }
-                for p in timeline.sorted_points()
-            ],
-        }
-        return JSONResponse(content=timeline_dict)
+        # ── Persist timeline: merge with any existing saved timeline ──────────
+        subject_dir = UPLOADS_DIR / subject_name
+        subject_dir.mkdir(parents=True, exist_ok=True)
+        timeline_path = subject_dir / "timeline.json"
+
+        if timeline_path.exists():
+            try:
+                existing = _json.loads(timeline_path.read_text(encoding="utf-8"))
+                merged = _merge_timeline_dicts(existing, new_timeline_dict["points"])
+                merged["subject_name"] = subject_name
+                timeline_path.write_text(
+                    _json.dumps(merged, ensure_ascii=False, indent=2), encoding="utf-8"
+                )
+                final_dict = merged
+            except Exception:
+                timeline_path.write_text(
+                    _json.dumps(new_timeline_dict, ensure_ascii=False, indent=2), encoding="utf-8"
+                )
+                final_dict = new_timeline_dict
+        else:
+            timeline_path.write_text(
+                _json.dumps(new_timeline_dict, ensure_ascii=False, indent=2), encoding="utf-8"
+            )
+            final_dict = new_timeline_dict
+
+        return JSONResponse(content=final_dict)
 
     except HTTPException:
         raise
