@@ -426,6 +426,51 @@ async def split_by_voice(
         shutil.rmtree(session_dir, ignore_errors=True)
 
 
+# ── Workflow: list existing subjects ─────────────────────────────────────────
+
+@app.get("/api/workflow/subjects")
+async def list_subjects():
+    """
+    Return a list of subject names that already have saved uploads.
+    Scans uploads/<subject_name>/ directories for a manifest.json to confirm
+    at least one completed preprocessing run exists.
+    """
+    subjects = []
+    if UPLOADS_DIR.exists():
+        for entry in sorted(UPLOADS_DIR.iterdir()):
+            if entry.is_dir() and not entry.name.startswith("__"):
+                # Check if any timestamp sub-directory has a manifest
+                has_data = any(
+                    (sub / "manifest.json").exists()
+                    for sub in entry.iterdir()
+                    if sub.is_dir()
+                )
+                if has_data:
+                    # Find anchor face/voice paths from the first manifest
+                    anchor_face = None
+                    anchor_voice = None
+                    try:
+                        manifests = sorted(
+                            sub / "manifest.json"
+                            for sub in entry.iterdir()
+                            if sub.is_dir() and (sub / "manifest.json").exists()
+                        )
+                        if manifests:
+                            import json as _json
+                            m = _json.loads(manifests[0].read_text(encoding="utf-8"))
+                            # Anchors aren't in manifest — just report name + count
+                    except Exception:
+                        pass
+                    subjects.append({
+                        "subject_name": entry.name,
+                        "sample_count": sum(
+                            1 for sub in entry.iterdir()
+                            if sub.is_dir() and (sub / "manifest.json").exists()
+                        ),
+                    })
+    return JSONResponse(content={"subjects": subjects})
+
+
 # ── Workflow: full lifetime-curve pipeline ────────────────────────────────────
 
 @app.post("/api/workflow/analyze")

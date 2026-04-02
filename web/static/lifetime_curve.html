@@ -7,34 +7,113 @@
   <link rel="stylesheet" href="/static/style.css" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
   <style>
-    /* ── Layout ── */
-    .lc-layout {
-      display: grid;
-      grid-template-columns: 360px 1fr;
-      gap: 24px;
-      padding: 24px;
-      max-width: 1400px;
+    /* ── Page body ── */
+    body { background: var(--bg-page, #f3f4f6); }
+
+    .page-wrap {
+      max-width: 900px;
       margin: 0 auto;
-    }
-    @media (max-width: 900px) {
-      .lc-layout { grid-template-columns: 1fr; }
+      padding: 28px 24px 60px;
+      display: flex;
+      flex-direction: column;
+      gap: 28px;
     }
 
-    /* ── Form panel ── */
-    .form-section { margin-bottom: 20px; }
-    .form-section label {
-      display: block;
-      font-size: 12px;
+    /* ── Section header ── */
+    .section-num {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 26px; height: 26px;
+      border-radius: 50%;
+      background: var(--accent, #3b82f6);
+      color: #fff;
+      font-size: 13px;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+    .section-title {
+      font-size: 16px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+
+    /* ── Person selector ── */
+    .person-tabs {
+      display: flex;
+      gap: 0;
+      border: 1px solid var(--border, #e5e7eb);
+      border-radius: 8px;
+      overflow: hidden;
+      margin-bottom: 20px;
+    }
+    .person-tab {
+      flex: 1;
+      padding: 10px 0;
+      text-align: center;
+      font-size: 13px;
       font-weight: 600;
+      cursor: pointer;
+      background: var(--bg, #fff);
+      color: var(--text-2, #6b7280);
+      border: none;
+      transition: background .15s, color .15s;
+    }
+    .person-tab.active {
+      background: var(--accent, #3b82f6);
+      color: #fff;
+    }
+
+    /* ── Existing person picker ── */
+    .subject-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      gap: 10px;
+      margin-bottom: 4px;
+    }
+    .subject-chip {
+      padding: 10px 12px;
+      border: 2px solid var(--border, #e5e7eb);
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 600;
+      background: var(--bg, #fff);
+      transition: border-color .15s, background .15s;
+      text-align: center;
+    }
+    .subject-chip:hover { border-color: var(--accent, #3b82f6); }
+    .subject-chip.selected {
+      border-color: var(--accent, #3b82f6);
+      background: #eff6ff;
+      color: var(--accent, #3b82f6);
+    }
+    .subject-chip .chip-name { font-size: 13px; font-weight: 700; }
+    .subject-chip .chip-count { font-size: 11px; color: var(--muted, #9ca3af); margin-top: 2px; }
+    .no-subjects {
+      font-size: 13px;
+      color: var(--muted, #9ca3af);
+      padding: 12px 0 4px;
+    }
+
+    /* ── Form fields ── */
+    .field { margin-bottom: 16px; }
+    .field label {
+      display: block;
+      font-size: 11px;
+      font-weight: 700;
       color: var(--text-2, #6b7280);
       text-transform: uppercase;
-      letter-spacing: .04em;
-      margin-bottom: 6px;
+      letter-spacing: .05em;
+      margin-bottom: 5px;
     }
-    .form-section input[type="text"],
-    .form-section input[type="number"],
-    .form-section input[type="date"],
-    .form-section input[type="file"] {
+    .field input[type="text"],
+    .field input[type="number"],
+    .field input[type="date"],
+    .field select {
       width: 100%;
       box-sizing: border-box;
       padding: 8px 10px;
@@ -44,92 +123,145 @@
       background: var(--bg, #fff);
       color: var(--text, #111);
     }
-    .form-section input[type="file"] { padding: 6px 8px; cursor: pointer; }
+    .field input[type="file"] {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 6px 8px;
+      border: 1px solid var(--border, #e5e7eb);
+      border-radius: 6px;
+      font-size: 13px;
+      cursor: pointer;
+    }
+    .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 
-    /* ── Video entries ── */
-    .video-list { display: flex; flex-direction: column; gap: 12px; }
+    /* ── Divider ── */
+    .divider {
+      border: none;
+      border-top: 1px solid var(--border, #e5e7eb);
+      margin: 20px 0;
+    }
+
+    /* ── Video list ── */
+    .video-list { display: flex; flex-direction: column; gap: 10px; }
     .video-entry {
       border: 1px solid var(--border, #e5e7eb);
       border-radius: 8px;
-      padding: 12px;
+      padding: 14px 16px;
       background: var(--bg-2, #f9fafb);
-      position: relative;
     }
-    .video-entry-header {
+    .video-entry-head {
       display: flex;
-      justify-content: space-between;
       align-items: center;
+      justify-content: space-between;
       margin-bottom: 10px;
-      font-size: 13px;
-      font-weight: 600;
     }
+    .video-entry-head span { font-size: 13px; font-weight: 700; color: var(--text-2); }
     .remove-btn {
-      background: none;
-      border: none;
-      cursor: pointer;
-      color: var(--muted, #9ca3af);
-      font-size: 16px;
-      padding: 0 4px;
+      background: none; border: none; cursor: pointer;
+      color: var(--muted, #9ca3af); font-size: 17px; padding: 0 2px;
     }
     .remove-btn:hover { color: #ef4444; }
-    .video-entry-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-    .video-entry-fields label {
-      font-size: 11px;
-      font-weight: 600;
-      color: var(--text-2, #6b7280);
-      display: block;
-      margin-bottom: 3px;
-    }
-    .video-entry-fields input { font-size: 12px; }
-    .video-file-row { margin-bottom: 8px; }
-
-    /* ── Buttons ── */
-    .btn-add {
+    .btn-add-video {
       width: 100%;
-      padding: 8px;
+      padding: 9px;
       background: none;
       border: 1px dashed var(--border, #e5e7eb);
       border-radius: 6px;
       color: var(--text-2, #6b7280);
       cursor: pointer;
       font-size: 13px;
+      margin-top: 6px;
+    }
+    .btn-add-video:hover { border-color: var(--accent, #3b82f6); color: var(--accent, #3b82f6); }
+
+    /* ── Options row ── */
+    .options-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      align-items: center;
       margin-top: 4px;
     }
-    .btn-add:hover { background: var(--bg-2, #f9fafb); color: var(--accent, #3b82f6); }
+    .options-row label {
+      font-size: 13px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+      color: var(--text, #111);
+    }
+    .threshold-pair { display: flex; gap: 12px; }
+    .threshold-pair .th-field { display: flex; align-items: center; gap: 6px; }
+    .threshold-pair .th-field label { font-size: 12px; color: var(--text-2); white-space: nowrap; }
+    .threshold-pair input { width: 68px; padding: 5px 7px; border: 1px solid var(--border); border-radius: 5px; font-size: 12px; }
 
-    /* ── Chart area ── */
-    .chart-wrapper-lc { position: relative; height: 340px; }
-    .timeline-point-list { margin-top: 16px; display: flex; flex-direction: column; gap: 12px; }
-    .timeline-point-card {
+    /* ── Submit ── */
+    .btn-submit {
+      width: 100%;
+      padding: 13px;
+      background: var(--accent, #3b82f6);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: opacity .15s;
+    }
+    .btn-submit:disabled { opacity: .55; cursor: not-allowed; }
+    .btn-submit:not(:disabled):hover { opacity: .9; }
+
+    /* ── Status ── */
+    .status-bar {
+      padding: 11px 14px;
+      border-radius: 8px;
+      font-size: 13px;
+      display: none;
+    }
+    .status-bar.info    { background: #eff6ff; color: #1d4ed8; display: block; }
+    .status-bar.error   { background: #fef2f2; color: #dc2626; display: block; }
+    .status-bar.success { background: #f0fdf4; color: #16a34a; display: block; }
+
+    /* ── Results ── */
+    .results-section { display: none; }
+    .results-section.visible { display: block; }
+
+    .chart-wrapper { position: relative; height: 320px; }
+
+    .point-list { margin-top: 16px; display: flex; flex-direction: column; gap: 10px; }
+    .point-card {
       border: 1px solid var(--border, #e5e7eb);
       border-radius: 8px;
       padding: 14px 16px;
+      background: var(--bg, #fff);
     }
-    .timeline-point-card .pt-date {
+    .point-card .pt-meta {
       font-size: 12px;
       font-weight: 700;
       color: var(--text-2, #6b7280);
       margin-bottom: 6px;
     }
-    .timeline-point-card .pt-estimate {
-      font-size: 22px;
+    .point-card .pt-estimate {
+      font-size: 24px;
       font-weight: 800;
       color: var(--accent, #3b82f6);
     }
-    .timeline-point-card .pt-range {
+    .point-card .pt-range {
       font-size: 12px;
       color: var(--muted, #9ca3af);
-      margin-left: 6px;
+      margin-left: 8px;
     }
-    .timeline-point-card .pt-summary {
+    .point-card .pt-summary {
       font-size: 13px;
       color: var(--text, #111);
       margin-top: 8px;
-      line-height: 1.6;
+      line-height: 1.65;
     }
-    .timeline-point-card .pt-factors {
-      display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px;
-    }
+    .factor-tags { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
     .factor-tag {
       padding: 2px 8px;
       background: var(--bg-2, #f9fafb);
@@ -139,19 +271,7 @@
       color: var(--text-2, #6b7280);
     }
 
-    /* ── Status ── */
-    .status-bar {
-      padding: 10px 14px;
-      border-radius: 8px;
-      font-size: 13px;
-      margin-bottom: 16px;
-      display: none;
-    }
-    .status-bar.info { background: #eff6ff; color: #1d4ed8; display: block; }
-    .status-bar.error { background: #fef2f2; color: #dc2626; display: block; }
-    .status-bar.success { background: #f0fdf4; color: #16a34a; display: block; }
-
-    /* ── Loading spinner ── */
+    /* ── Spinner ── */
     .spinner {
       display: inline-block;
       width: 14px; height: 14px;
@@ -160,23 +280,23 @@
       border-radius: 50%;
       animation: spin .7s linear infinite;
       vertical-align: middle;
-      margin-right: 6px;
     }
     @keyframes spin { to { transform: rotate(360deg); } }
 
-    /* ── Empty state ── */
-    .lc-empty {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      padding: 60px 0;
-      color: var(--muted, #9ca3af);
+    /* ── Empty placeholder ── */
+    .empty-placeholder {
       text-align: center;
+      padding: 48px 0;
+      color: var(--muted, #9ca3af);
     }
-    .lc-empty .icon { font-size: 56px; }
-    .lc-empty .title { font-size: 18px; font-weight: 700; margin-top: 12px; color: var(--text-2, #6b7280); }
-    .lc-empty .hint { font-size: 13px; margin-top: 6px; }
+    .empty-placeholder .ep-icon { font-size: 52px; }
+    .empty-placeholder .ep-title {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--text-2, #6b7280);
+      margin-top: 12px;
+    }
+    .empty-placeholder .ep-hint { font-size: 13px; margin-top: 6px; }
   </style>
 </head>
 <body>
@@ -195,214 +315,314 @@
   </nav>
 </header>
 
-<div class="lc-layout">
+<div class="page-wrap">
 
-  <!-- ── Left: Input panel ──────────────────────────── -->
-  <div class="lc-left">
+  <!-- ══════════════════════════════════════════════════════════
+       PART 1 — UPLOAD
+  ═══════════════════════════════════════════════════════════ -->
+  <div class="card">
+    <div class="section-title">
+      <span class="section-num">1</span>
+      上传材料
+    </div>
 
-    <!-- Subject identity -->
-    <div class="card">
-      <div class="card-title"><span class="icon">👤</span>目标人物</div>
+    <!-- Person selector tabs -->
+    <div class="person-tabs">
+      <button class="person-tab active" id="tabExisting" onclick="switchTab('existing')">选择已有人物</button>
+      <button class="person-tab" id="tabNew" onclick="switchTab('new')">新建人物</button>
+    </div>
 
-      <div class="form-section">
+    <!-- ── Existing person ── -->
+    <div id="panelExisting">
+      <div id="subjectGrid" class="subject-grid">
+        <div class="no-subjects">正在加载…</div>
+      </div>
+      <p id="selectedNameDisplay" style="font-size:13px;color:var(--accent);font-weight:600;margin-top:8px;display:none"></p>
+    </div>
+
+    <!-- ── New person ── -->
+    <div id="panelNew" style="display:none">
+      <div class="field">
         <label>姓名 / ID</label>
-        <input type="text" id="subjectName" placeholder="例：张三（作为存储目录名）" />
+        <input type="text" id="newName" placeholder="例：张三（用作目录名，请勿使用特殊符号）" />
       </div>
-
-      <div class="form-section">
-        <label>锚点照片（用于人脸识别）</label>
-        <input type="file" id="anchorFace" accept="image/*" />
-      </div>
-
-      <div class="form-section">
-        <label>锚点声音（用于声纹识别）</label>
-        <input type="file" id="anchorVoice" accept="audio/*,video/*" />
-      </div>
-    </div>
-
-    <!-- Video samples -->
-    <div class="card">
-      <div class="card-title"><span class="icon">🎬</span>视频样本</div>
-      <p style="font-size:12px;color:var(--text-2);margin-bottom:12px">
-        每条视频需标注拍摄日期和拍摄时的年龄，用于生成时间轴。
-      </p>
-
-      <div class="video-list" id="videoList"></div>
-      <button class="btn-add" id="addVideoBtn">＋ 添加视频</button>
-    </div>
-
-    <!-- Options -->
-    <div class="card">
-      <div class="card-title"><span class="icon">⚙️</span>选项</div>
-      <div style="display:flex;gap:16px;flex-wrap:wrap">
-        <label style="font-size:13px;display:flex;align-items:center;gap:6px;cursor:pointer">
-          <input type="checkbox" id="includeSkinDisease" />
-          包含皮肤病检测（较慢）
-        </label>
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px">
-        <div>
-          <label style="font-size:11px;font-weight:600;color:var(--text-2);display:block;margin-bottom:3px">人脸相似度阈值</label>
-          <input type="number" id="faceThreshold" value="0.70" min="0" max="1" step="0.05" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px" />
+      <div class="field-row">
+        <div class="field">
+          <label>锚点照片</label>
+          <input type="file" id="anchorFace" accept="image/*" />
         </div>
-        <div>
-          <label style="font-size:11px;font-weight:600;color:var(--text-2);display:block;margin-bottom:3px">声纹相似度阈值</label>
-          <input type="number" id="voiceThreshold" value="0.75" min="0" max="1" step="0.05" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px" />
+        <div class="field">
+          <label>锚点声音</label>
+          <input type="file" id="anchorVoice" accept="audio/*,video/*" />
         </div>
       </div>
     </div>
 
-    <button class="btn-run" id="runBtn" style="width:100%">
-      <span id="runBtnIcon">▶</span>
-      <span id="runBtnText">开始分析</span>
-    </button>
+    <hr class="divider" />
+
+    <!-- ── Video uploads ── -->
+    <div style="font-size:13px;font-weight:700;color:var(--text-2);margin-bottom:12px">
+      📹 视频样本（每条需填写拍摄日期与拍摄时年龄）
+    </div>
+
+    <div class="video-list" id="videoList"></div>
+    <button class="btn-add-video" id="addVideoBtn">＋ 添加视频</button>
+
+    <hr class="divider" />
+
+    <!-- ── Options ── -->
+    <div class="options-row">
+      <label>
+        <input type="checkbox" id="includeSkin" />
+        含皮肤病检测（较慢）
+      </label>
+      <div class="threshold-pair">
+        <div class="th-field">
+          <label>人脸阈值</label>
+          <input type="number" id="faceThreshold" value="0.70" min="0" max="1" step="0.05" />
+        </div>
+        <div class="th-field">
+          <label>声纹阈值</label>
+          <input type="number" id="voiceThreshold" value="0.75" min="0" max="1" step="0.05" />
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-top:20px">
+      <button class="btn-submit" id="runBtn" onclick="runAnalysis()">
+        <span id="runIcon">▶</span>
+        <span id="runText">开始分析</span>
+      </button>
+    </div>
 
   </div>
 
-  <!-- ── Right: Results panel ────────────────────────── -->
-  <div class="lc-right">
+  <!-- Status bar (between the two parts) -->
+  <div class="status-bar" id="statusBar"></div>
 
-    <div id="statusBar" class="status-bar"></div>
+  <!-- ══════════════════════════════════════════════════════════
+       PART 2 — RESULTS
+  ═══════════════════════════════════════════════════════════ -->
+  <div class="card">
+    <div class="section-title">
+      <span class="section-num">2</span>
+      剩余寿命预测曲线
+      <span id="resultSubjectLabel" style="font-size:13px;font-weight:600;color:var(--accent);margin-left:auto"></span>
+    </div>
 
     <!-- Empty state -->
-    <div class="lc-empty" id="emptyState">
-      <div class="icon">📈</div>
-      <div class="title">填写左侧信息后点击「开始分析」</div>
-      <div class="hint">系统将提取人脸、声纹并运行多模态健康模型，生成剩余寿命时间轴</div>
+    <div class="empty-placeholder" id="emptyState">
+      <div class="ep-icon">📉</div>
+      <div class="ep-title">完成第 1 步后，曲线将展示在此处</div>
+      <div class="ep-hint">横轴为拍摄日期，纵轴为估计剩余寿命（年），灰色区域为不确定性区间</div>
     </div>
 
-    <!-- Chart -->
-    <div class="card" id="chartCard" style="display:none">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-        <div class="card-title" style="margin-bottom:0">
-          <span class="icon">📉</span>剩余寿命估计曲线
-        </div>
-        <span id="subjectLabel" style="font-size:13px;font-weight:600;color:var(--accent)"></span>
-      </div>
-      <div class="chart-wrapper-lc">
+    <!-- Chart (hidden until results arrive) -->
+    <div id="chartArea" style="display:none">
+      <div class="chart-wrapper">
         <canvas id="lifetimeChart"></canvas>
       </div>
+
+      <div class="point-list" id="pointList"></div>
     </div>
 
-    <!-- Per-sample cards -->
-    <div id="pointList" class="timeline-point-list"></div>
-
   </div>
-</div>
+
+</div><!-- /page-wrap -->
 
 <script>
-// ── State ──────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────
+// State
+// ─────────────────────────────────────────────────────────────
+let activeTab = 'existing';   // 'existing' | 'new'
+let selectedSubject = null;   // name of selected existing subject
 let videoCount = 0;
 let chart = null;
 
-// ── Add default first video entry on load ──────────────────────────────────
+// ─────────────────────────────────────────────────────────────
+// Boot
+// ─────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
-  addVideoEntry();
+  loadSubjects();
+  addVideoEntry();  // start with one video row
+  document.getElementById('addVideoBtn').addEventListener('click', addVideoEntry);
 });
 
-// ── Video entry management ─────────────────────────────────────────────────
-document.getElementById('addVideoBtn').addEventListener('click', addVideoEntry);
+// ─────────────────────────────────────────────────────────────
+// Tab switching
+// ─────────────────────────────────────────────────────────────
+function switchTab(tab) {
+  activeTab = tab;
+  document.getElementById('tabExisting').classList.toggle('active', tab === 'existing');
+  document.getElementById('tabNew').classList.toggle('active', tab === 'new');
+  document.getElementById('panelExisting').style.display = tab === 'existing' ? '' : 'none';
+  document.getElementById('panelNew').style.display      = tab === 'new'      ? '' : 'none';
+  selectedSubject = null;
+}
 
+// ─────────────────────────────────────────────────────────────
+// Load and render existing subjects
+// ─────────────────────────────────────────────────────────────
+async function loadSubjects() {
+  try {
+    const resp = await fetch('/api/workflow/subjects');
+    const data = await resp.json();
+    renderSubjectGrid(data.subjects || []);
+  } catch (e) {
+    renderSubjectGrid([]);
+  }
+}
+
+function renderSubjectGrid(subjects) {
+  const grid = document.getElementById('subjectGrid');
+  if (!subjects.length) {
+    grid.innerHTML = '<div class="no-subjects">暂无已有人物，请切换到「新建人物」。</div>';
+    return;
+  }
+  grid.innerHTML = subjects.map(s => `
+    <div class="subject-chip" id="chip_${esc(s.subject_name)}" onclick="selectSubject(${JSON.stringify(s.subject_name)})">
+      <div class="chip-name">${esc(s.subject_name)}</div>
+      <div class="chip-count">${s.sample_count} 次采样</div>
+    </div>
+  `).join('');
+}
+
+function selectSubject(name) {
+  selectedSubject = name;
+  document.querySelectorAll('.subject-chip').forEach(el => el.classList.remove('selected'));
+  const chip = document.getElementById(`chip_${esc(name)}`);
+  if (chip) chip.classList.add('selected');
+  const disp = document.getElementById('selectedNameDisplay');
+  disp.textContent = `✓ 已选择：${name}`;
+  disp.style.display = '';
+}
+
+// ─────────────────────────────────────────────────────────────
+// Video entry management
+// ─────────────────────────────────────────────────────────────
 function addVideoEntry() {
   videoCount++;
   const id = videoCount;
   const list = document.getElementById('videoList');
 
-  const entry = document.createElement('div');
-  entry.className = 'video-entry';
-  entry.dataset.id = id;
-  entry.innerHTML = `
-    <div class="video-entry-header">
+  const div = document.createElement('div');
+  div.className = 'video-entry';
+  div.dataset.id = id;
+  div.innerHTML = `
+    <div class="video-entry-head">
       <span>视频 #${id}</span>
-      <button class="remove-btn" onclick="removeVideoEntry(${id})" title="移除">✕</button>
+      <button class="remove-btn" onclick="removeVideo(${id})" title="移除">✕</button>
     </div>
-    <div class="video-file-row">
-      <label style="font-size:11px;font-weight:600;color:var(--text-2);display:block;margin-bottom:3px">视频文件</label>
-      <input type="file" id="videoFile_${id}" accept="video/*" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px" />
+    <div class="field" style="margin-bottom:10px">
+      <label>视频文件</label>
+      <input type="file" id="vf_${id}" accept="video/*" />
     </div>
-    <div class="video-entry-fields">
-      <div>
+    <div class="field-row">
+      <div class="field" style="margin-bottom:0">
         <label>拍摄日期</label>
-        <input type="date" id="videoDate_${id}" value="${todayStr()}" />
+        <input type="date" id="vd_${id}" value="${todayStr()}" />
       </div>
-      <div>
+      <div class="field" style="margin-bottom:0">
         <label>拍摄时年龄（岁）</label>
-        <input type="number" id="videoAge_${id}" placeholder="例：70" min="0" max="130" />
+        <input type="number" id="va_${id}" placeholder="例：70" min="0" max="130" />
       </div>
     </div>
   `;
-  list.appendChild(entry);
+  list.appendChild(div);
 }
 
-function removeVideoEntry(id) {
-  const entry = document.querySelector(`.video-entry[data-id="${id}"]`);
-  if (entry) entry.remove();
+function removeVideo(id) {
+  const el = document.querySelector(`.video-entry[data-id="${id}"]`);
+  if (el) el.remove();
 }
 
 function todayStr() {
   return new Date().toISOString().slice(0, 10);
 }
 
-// ── Collect all video entries ──────────────────────────────────────────────
-function collectVideoEntries() {
-  const entries = document.querySelectorAll('.video-entry');
-  const result = [];
-  for (const entry of entries) {
-    const id = entry.dataset.id;
-    const fileInput = document.getElementById(`videoFile_${id}`);
-    const dateInput = document.getElementById(`videoDate_${id}`);
-    const ageInput  = document.getElementById(`videoAge_${id}`);
-    if (!fileInput.files.length) continue;
-    result.push({
-      file: fileInput.files[0],
-      date: dateInput.value,
-      age: ageInput.value,
-    });
-  }
-  return result;
+// ─────────────────────────────────────────────────────────────
+// Collect videos from DOM
+// ─────────────────────────────────────────────────────────────
+function collectVideos() {
+  return [...document.querySelectorAll('.video-entry')].map(el => {
+    const id = el.dataset.id;
+    return {
+      file: document.getElementById(`vf_${id}`)?.files[0],
+      date: document.getElementById(`vd_${id}`)?.value,
+      age:  document.getElementById(`va_${id}`)?.value,
+    };
+  }).filter(v => v.file);
 }
 
-// ── Validate form ──────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────
+// Validation
+// ─────────────────────────────────────────────────────────────
 function validate() {
-  const name = document.getElementById('subjectName').value.trim();
-  if (!name) return '请填写姓名 / ID';
+  if (activeTab === 'existing') {
+    if (!selectedSubject) return '请在上方选择一个已有人物，或切换到「新建人物」';
+  } else {
+    const name = document.getElementById('newName').value.trim();
+    if (!name) return '请填写姓名 / ID';
+    const face = document.getElementById('anchorFace').files;
+    const voice = document.getElementById('anchorVoice').files;
+    if (!face.length)  return '请上传锚点照片';
+    if (!voice.length) return '请上传锚点声音';
+  }
 
-  const faceInput = document.getElementById('anchorFace');
-  if (!faceInput.files.length) return '请上传锚点照片';
-
-  const voiceInput = document.getElementById('anchorVoice');
-  if (!voiceInput.files.length) return '请上传锚点声音';
-
-  const videos = collectVideoEntries();
-  if (!videos.length) return '请至少添加一条视频样本';
+  const videos = collectVideos();
+  if (!videos.length) return '请至少添加一条视频文件';
   for (const v of videos) {
     if (!v.date) return '视频缺少拍摄日期';
-    if (!v.age) return '视频缺少拍摄时年龄';
+    if (!v.age)  return '视频缺少拍摄时年龄';
   }
   return null;
 }
 
-// ── Run button ─────────────────────────────────────────────────────────────
-document.getElementById('runBtn').addEventListener('click', runAnalysis);
-
+// ─────────────────────────────────────────────────────────────
+// Run analysis
+// ─────────────────────────────────────────────────────────────
 async function runAnalysis() {
   const err = validate();
   if (err) { showStatus('error', err); return; }
 
   setRunning(true);
-  showStatus('info', '<span class="spinner"></span>正在处理，请耐心等待（预处理和模型推理可能需要数分钟）…');
-  hideResults();
+  showStatus('info', '<span class="spinner"></span> 正在处理，请耐心等待（可能需要数分钟）…');
+  clearResults();
 
   try {
     const fd = new FormData();
-    fd.append('subject_name', document.getElementById('subjectName').value.trim());
-    fd.append('anchor_face', document.getElementById('anchorFace').files[0]);
-    fd.append('anchor_voice', document.getElementById('anchorVoice').files[0]);
-    fd.append('include_skin_disease', document.getElementById('includeSkinDisease').checked);
+
+    // Subject identity
+    let subjectName;
+    if (activeTab === 'existing') {
+      subjectName = selectedSubject;
+      // For existing subjects, we still need to pass anchor files.
+      // Use placeholder empty blobs — the backend should ideally look up saved anchors.
+      // For now, we require the user to re-upload anchors for existing subjects too.
+      // TODO: store and retrieve anchor paths server-side.
+      // Fallback: prompt user for anchors even for existing subjects.
+      const face = document.getElementById('anchorFaceExisting');
+      const voice = document.getElementById('anchorVoiceExisting');
+      if (!face || !face.files.length || !voice || !voice.files.length) {
+        // Show anchor upload for existing
+        showStatus('error', '请补充锚点照片和声音（现阶段仍需每次提供）');
+        setRunning(false);
+        return;
+      }
+      fd.append('anchor_face', face.files[0]);
+      fd.append('anchor_voice', voice.files[0]);
+    } else {
+      subjectName = document.getElementById('newName').value.trim();
+      fd.append('anchor_face', document.getElementById('anchorFace').files[0]);
+      fd.append('anchor_voice', document.getElementById('anchorVoice').files[0]);
+    }
+
+    fd.append('subject_name', subjectName);
+    fd.append('include_skin_disease', document.getElementById('includeSkin').checked);
     fd.append('face_threshold', document.getElementById('faceThreshold').value);
     fd.append('voice_threshold', document.getElementById('voiceThreshold').value);
 
-    const videos = collectVideoEntries();
+    const videos = collectVideos();
     for (const v of videos) {
       fd.append('videos', v.file);
       fd.append('dates', v.date);
@@ -412,12 +632,12 @@ async function runAnalysis() {
     const resp = await fetch('/api/workflow/analyze', { method: 'POST', body: fd });
     const data = await resp.json();
 
-    if (!resp.ok) {
-      throw new Error(data.detail || `HTTP ${resp.status}`);
-    }
+    if (!resp.ok) throw new Error(data.detail || `HTTP ${resp.status}`);
 
     renderResults(data);
     showStatus('success', `✓ 分析完成 — ${data.points.length} 个时间点`);
+    // Reload subject list so new subject appears next time
+    loadSubjects();
 
   } catch (e) {
     showStatus('error', `❌ 错误：${e.message}`);
@@ -426,44 +646,29 @@ async function runAnalysis() {
   }
 }
 
-// ── Render results ─────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────
+// Render results
+// ─────────────────────────────────────────────────────────────
 function renderResults(data) {
   document.getElementById('emptyState').style.display = 'none';
-
-  const subject = data.subject_name || '未知';
-  document.getElementById('subjectLabel').textContent = subject;
+  document.getElementById('chartArea').style.display = '';
+  document.getElementById('resultSubjectLabel').textContent = data.subject_name || '';
 
   const points = data.points || [];
-
-  // Chart
   renderChart(points);
 
-  // Per-sample cards
   const list = document.getElementById('pointList');
   list.innerHTML = '';
-  for (const pt of points) {
-    list.appendChild(buildPointCard(pt));
-  }
+  for (const pt of points) list.appendChild(buildPointCard(pt));
 }
 
 function renderChart(points) {
-  const chartCard = document.getElementById('chartCard');
-  chartCard.style.display = '';
-
-  const labels = points.map(p => p.captured_at.slice(0, 10));
-  const estimates = points.map(p => p.remaining_life_estimate >= 0 ? p.remaining_life_estimate : null);
-  const lows = points.map(p => p.uncertainty_low);
-  const highs = points.map(p => p.uncertainty_high);
-
-  // Build error bar data: [{x, y, yMin, yMax}]
-  const mainData = points.map((p, i) => ({
-    x: labels[i],
-    y: estimates[i],
-    yMin: lows[i],
-    yMax: highs[i],
-  }));
-
   if (chart) { chart.destroy(); chart = null; }
+
+  const labels    = points.map(p => p.captured_at.slice(0, 10));
+  const estimates = points.map(p => p.remaining_life_estimate >= 0 ? p.remaining_life_estimate : null);
+  const lows      = points.map(p => p.uncertainty_low);
+  const highs     = points.map(p => p.uncertainty_high);
 
   const ctx = document.getElementById('lifetimeChart').getContext('2d');
   chart = new Chart(ctx, {
@@ -475,31 +680,34 @@ function renderChart(points) {
           label: '剩余寿命估计（年）',
           data: estimates,
           borderColor: '#3b82f6',
-          backgroundColor: 'rgba(59,130,246,0.1)',
+          backgroundColor: 'rgba(59,130,246,0.08)',
           pointRadius: 5,
           pointBackgroundColor: '#3b82f6',
-          tension: 0.3,
+          tension: 0.35,
           fill: false,
+          order: 1,
         },
         {
           label: '不确定性上界',
           data: highs,
-          borderColor: 'rgba(59,130,246,0.2)',
-          backgroundColor: 'rgba(59,130,246,0.08)',
+          borderColor: 'rgba(156,163,175,0.5)',
+          backgroundColor: 'rgba(156,163,175,0.12)',
           pointRadius: 0,
-          borderDash: [4, 4],
+          borderDash: [5, 4],
           fill: '+1',
-          tension: 0.3,
+          tension: 0.35,
+          order: 2,
         },
         {
           label: '不确定性下界',
           data: lows,
-          borderColor: 'rgba(59,130,246,0.2)',
-          backgroundColor: 'rgba(59,130,246,0.08)',
+          borderColor: 'rgba(156,163,175,0.5)',
+          backgroundColor: 'rgba(156,163,175,0.12)',
           pointRadius: 0,
-          borderDash: [4, 4],
+          borderDash: [5, 4],
           fill: false,
-          tension: 0.3,
+          tension: 0.35,
+          order: 3,
         },
       ],
     },
@@ -507,27 +715,22 @@ function renderChart(points) {
       responsive: true,
       maintainAspectRatio: false,
       plugins: {
-        legend: {
-          display: true,
-          labels: { boxWidth: 12, font: { size: 12 } },
-        },
+        legend: { labels: { boxWidth: 12, font: { size: 12 } } },
         tooltip: {
           callbacks: {
             label: ctx => {
               const pt = points[ctx.dataIndex];
               if (!pt) return '';
-              const est = pt.remaining_life_estimate >= 0 ? pt.remaining_life_estimate.toFixed(1) : '—';
-              return `估计：${est} 年  [${pt.uncertainty_low.toFixed(1)}–${pt.uncertainty_high.toFixed(1)}]`;
+              const est = pt.remaining_life_estimate >= 0
+                ? pt.remaining_life_estimate.toFixed(1) : '—';
+              return `估计 ${est} 年  [${pt.uncertainty_low.toFixed(1)}–${pt.uncertainty_high.toFixed(1)}]`;
             },
           },
         },
       },
       scales: {
         x: { title: { display: true, text: '拍摄日期' } },
-        y: {
-          title: { display: true, text: '剩余寿命（年）' },
-          beginAtZero: true,
-        },
+        y: { title: { display: true, text: '剩余寿命（年）' }, beginAtZero: true },
       },
     },
   });
@@ -535,37 +738,39 @@ function renderChart(points) {
 
 function buildPointCard(pt) {
   const card = document.createElement('div');
-  card.className = 'timeline-point-card card';
+  card.className = 'point-card';
 
-  const est = pt.remaining_life_estimate >= 0 ? pt.remaining_life_estimate.toFixed(1) : '—';
-  const low = pt.uncertainty_low.toFixed(1);
+  const est  = pt.remaining_life_estimate >= 0 ? pt.remaining_life_estimate.toFixed(1) : '—';
+  const low  = pt.uncertainty_low.toFixed(1);
   const high = pt.uncertainty_high.toFixed(1);
   const date = pt.captured_at.slice(0, 10);
-  const age = pt.age_at_capture;
+  const age  = pt.age_at_capture;
 
-  const factors = (pt.key_factors || [])
-    .map(f => `<span class="factor-tag">${escHtml(f)}</span>`)
+  const tags = (pt.key_factors || [])
+    .map(f => `<span class="factor-tag">${esc(f)}</span>`)
     .join('');
 
   card.innerHTML = `
-    <div class="pt-date">${date}（时年 ${age} 岁）</div>
+    <div class="pt-meta">${date}（时年 ${age} 岁）</div>
     <div>
       <span class="pt-estimate">${est} 年</span>
-      <span class="pt-range">不确定区间：${low}–${high} 年</span>
+      <span class="pt-range">[${low} – ${high}]</span>
     </div>
-    ${pt.summary ? `<div class="pt-summary">${escHtml(pt.summary)}</div>` : ''}
-    ${factors ? `<div class="pt-factors">${factors}</div>` : ''}
+    ${pt.summary ? `<div class="pt-summary">${esc(pt.summary)}</div>` : ''}
+    ${tags ? `<div class="factor-tags">${tags}</div>` : ''}
   `;
   return card;
 }
 
-// ── UI helpers ─────────────────────────────────────────────────────────────
-function setRunning(running) {
-  const btn = document.getElementById('runBtn');
-  const icon = document.getElementById('runBtnIcon');
-  const text = document.getElementById('runBtnText');
-  btn.disabled = running;
-  if (running) {
+// ─────────────────────────────────────────────────────────────
+// UI helpers
+// ─────────────────────────────────────────────────────────────
+function setRunning(on) {
+  const btn  = document.getElementById('runBtn');
+  const icon = document.getElementById('runIcon');
+  const text = document.getElementById('runText');
+  btn.disabled = on;
+  if (on) {
     icon.innerHTML = '<span class="spinner"></span>';
     text.textContent = '分析中…';
   } else {
@@ -580,18 +785,51 @@ function showStatus(type, msg) {
   bar.innerHTML = msg;
 }
 
-function hideResults() {
-  document.getElementById('chartCard').style.display = 'none';
-  document.getElementById('pointList').innerHTML = '';
+function clearResults() {
   document.getElementById('emptyState').style.display = '';
+  document.getElementById('chartArea').style.display  = 'none';
+  document.getElementById('pointList').innerHTML = '';
+  document.getElementById('resultSubjectLabel').textContent = '';
   if (chart) { chart.destroy(); chart = null; }
 }
 
-function escHtml(s) {
+function esc(s) {
   return String(s).replace(/[&<>"']/g, c =>
     ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c])
   );
 }
 </script>
+
+<!-- ── Anchor inputs for existing-person mode (injected lazily) ── -->
+<!-- These appear below the grid when "Existing" tab is active     -->
+<script>
+// Inject anchor fields below the existing-person grid once tab is stable
+function ensureExistingAnchorFields() {
+  if (document.getElementById('anchorFaceExisting')) return;
+  const panel = document.getElementById('panelExisting');
+  const div = document.createElement('div');
+  div.style.marginTop = '14px';
+  div.innerHTML = `
+    <div style="font-size:11px;font-weight:700;color:var(--text-2);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">
+      锚点文件（每次分析仍需上传以确认身份）
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div>
+        <label style="font-size:11px;font-weight:700;color:var(--text-2);display:block;margin-bottom:4px">锚点照片</label>
+        <input type="file" id="anchorFaceExisting" accept="image/*" style="width:100%;box-sizing:border-box;padding:6px 8px;border:1px solid var(--border,#e5e7eb);border-radius:6px;font-size:12px;cursor:pointer" />
+      </div>
+      <div>
+        <label style="font-size:11px;font-weight:700;color:var(--text-2);display:block;margin-bottom:4px">锚点声音</label>
+        <input type="file" id="anchorVoiceExisting" accept="audio/*,video/*" style="width:100%;box-sizing:border-box;padding:6px 8px;border:1px solid var(--border,#e5e7eb);border-radius:6px;font-size:12px;cursor:pointer" />
+      </div>
+    </div>
+  `;
+  panel.appendChild(div);
+}
+
+// Inject on page load
+document.addEventListener('DOMContentLoaded', ensureExistingAnchorFields);
+</script>
+
 </body>
 </html>
