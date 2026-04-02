@@ -15,6 +15,10 @@ Aggregation:
   - Parkinsons: mean probability + majority-vote label across all clips
   - lung_cancer:same
   - SkinDisease:most-common label across all images
+
+Progress:
+  progress_cb(event_type, **kwargs) is called after each item finishes.
+  Useful for streaming per-model progress to the frontend.
 """
 from __future__ import annotations
 
@@ -25,8 +29,9 @@ import os
 import statistics
 import subprocess
 import sys
+import threading
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT_DIR))
@@ -84,7 +89,10 @@ def _call_module(module_id: str, inputs: dict, timeout: int = 300) -> dict:
 
 # ── FaceAge ───────────────────────────────────────────────────────────────────
 
-def _run_faceage(image_paths: list[str]) -> FaceAgeResult:
+def _run_faceage(
+    image_paths: list[str],
+    progress_cb: Optional[Callable] = None,
+) -> FaceAgeResult:
     """
     Run FaceAge in batch mode across all face images.
     Returns aggregated FaceAgeResult (median biological age).
@@ -93,12 +101,13 @@ def _run_faceage(image_paths: list[str]) -> FaceAgeResult:
         return FaceAgeResult(status="skipped", error="No face images available")
 
     try:
-        # FaceAge batch mode: pass image_paths list, get list of UnifiedResult back
         raw = _call_module("faceage", {"image_paths": image_paths}, timeout=600)
     except Exception as exc:
+        if progress_cb:
+            progress_cb("model_progress", model="faceage", done=True, status="error",
+                        desc=f"⚠ FaceAge 失败：{exc}")
         return FaceAgeResult(status="error", error=str(exc))
 
-    # raw may be a list (batch) or a single dict
     if isinstance(raw, list):
         items = raw
     else:
@@ -112,9 +121,16 @@ def _run_faceage(image_paths: list[str]) -> FaceAgeResult:
                 bio_ages.append(float(bio_age))
 
     if not bio_ages:
+        if progress_cb:
+            progress_cb("model_progress", model="faceage", done=True, status="error",
+                        desc="⚠ FaceAge：所有图像均未能预测生物年龄")
         return FaceAgeResult(status="error", error="所有图像均未能成功预测生物年龄")
 
     median_age = statistics.median(bio_ages)
+    if progress_cb:
+        progress_cb("model_progress", model="faceage", done=True, status="ok",
+                    value=round(median_age, 1),
+                    desc=f"✓ FaceAge 完成，生物年龄中位数 {median_age:.1f} 岁（共 {len(bio_ages)} 张）")
     return FaceAgeResult(
         biological_age_median=median_age,
         biological_age_values=bio_ages,
@@ -137,26 +153,44 @@ def _run_facettd_one(image_path: str, age: int) -> Optional[float]:
     return None
 
 
-def _run_facettd(image_paths: list[str], age: int) -> FacettdResult:
+def _run_facettd(
+    image_paths: list[str],
+    age: int,
+    progress_cb: Optional[Callable] = None,
+) -> FacettdResult:
     """
     Run facettd on each face image, aggregate with median.
+    Emits per-image progress via progress_cb.
     """
     if not image_paths:
         return FacettdResult(status="skipped", error="No face images available")
 
+    total = len(image_paths)
+    completed_box = [0]
+    lock = threading.Lock()
+
+    def run_one_tracked(path: str) -> Optional[float]:
+        result = _run_facettd_one(path, age)
+        with lock:
+            completed_box[0] += 1
+            c = completed_box[0]
+        if progress_cb:
+            progress_cb("model_progress", model="facettd",
+                        current=c, total=total, done=(c == total),
+                        desc=f"facettd: {c}/{total} 张")
+        return result
+
     values: list[float] = []
     with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
-        futures = {executor.submit(_run_facettd_one, p, age): p for p in image_paths}
-        for f in concurrent.futures.as_completed(futures):
-            result = f.result()
-            if result is not None:
-                values.append(result)
+        results = list(executor.map(run_one_tracked, image_paths))
+        values = [r for r in results if r is not None]
 
     if not values:
         return FacettdResult(status="error", error="facettd 未返回有效结果")
 
+    median_val = statistics.median(values)
     return FacettdResult(
-        remaining_life_median=statistics.median(values),
+        remaining_life_median=median_val,
         remaining_life_values=values,
         status="ok",
     )
@@ -169,10 +203,12 @@ def _run_audio_disease_module(
     audio_paths: list[str],
     prob_key: str = "probability",
     label_key: str = "label",
+    progress_cb: Optional[Callable] = None,
 ) -> DiseaseRiskResult:
     """
     Generic aggregator for audio-based disease detection.
     Runs module once per audio clip, aggregates mean probability + majority vote.
+    Emits per-clip progress via progress_cb.
     """
     if not audio_paths:
         return DiseaseRiskResult(
@@ -181,10 +217,11 @@ def _run_audio_disease_module(
             error="No audio segments available",
         )
 
+    total = len(audio_paths)
     probs: list[float] = []
     labels: list[str] = []
 
-    for audio_path in audio_paths:
+    for i, audio_path in enumerate(audio_paths):
         try:
             raw = _call_module(module_id, {"audio_path": audio_path})
             if raw.get("status") == "success":
@@ -196,6 +233,10 @@ def _run_audio_disease_module(
                     labels.append(str(l))
         except Exception as exc:
             logger.debug("[%s] failed for %s: %s", module_id, audio_path, exc)
+        if progress_cb:
+            progress_cb("model_progress", model=module_id,
+                        current=i + 1, total=total, done=(i + 1 == total),
+                        desc=f"{module_id}: {i + 1}/{total} 段")
 
     if not probs and not labels:
         return DiseaseRiskResult(module_id=module_id, status="error", error="无有效结果")
@@ -220,9 +261,11 @@ def _run_image_disease_module(
     image_paths: list[str],
     prob_key: str = "probability",
     label_key: str = "label",
+    progress_cb: Optional[Callable] = None,
 ) -> DiseaseRiskResult:
     """
     Generic aggregator for image-based disease detection (e.g. SkinDisease).
+    Emits per-image progress via progress_cb.
     """
     if not image_paths:
         return DiseaseRiskResult(
@@ -231,10 +274,11 @@ def _run_image_disease_module(
             error="No face images available",
         )
 
+    total = len(image_paths)
     probs: list[float] = []
     labels: list[str] = []
 
-    for image_path in image_paths:
+    for i, image_path in enumerate(image_paths):
         try:
             raw = _call_module(module_id, {"image_path": image_path})
             if raw.get("status") == "success":
@@ -246,6 +290,10 @@ def _run_image_disease_module(
                     labels.append(str(l))
         except Exception as exc:
             logger.debug("[%s] failed for %s: %s", module_id, image_path, exc)
+        if progress_cb:
+            progress_cb("model_progress", model=module_id,
+                        current=i + 1, total=total, done=(i + 1 == total),
+                        desc=f"{module_id}: {i + 1}/{total} 张")
 
     if not probs and not labels:
         return DiseaseRiskResult(module_id=module_id, status="error", error="无有效结果")
@@ -270,6 +318,7 @@ def _run_image_disease_module(
 def aggregate_sample(
     sample: PreprocessedSample,
     include_skin_disease: bool = False,
+    progress_cb: Optional[Callable] = None,
 ) -> SampleAnalysisResult:
     """
     Run all health modules against a preprocessed sample and aggregate results.
@@ -284,9 +333,7 @@ def aggregate_sample(
     Args:
         sample:               Output of preprocess_pipeline.preprocess_sample.
         include_skin_disease: Whether to include the SkinDisease module.
-
-    Returns:
-        SampleAnalysisResult with all module outputs filled in.
+        progress_cb:          Optional callable(event_type, **data) for progress.
     """
     face_paths = sample.face_image_paths
     audio_paths = sample.audio_segment_paths
@@ -295,22 +342,27 @@ def aggregate_sample(
     logger.info("[%s] 开始聚合分析（%d 张脸，%d 段音频，年龄 %d）",
                 sample.subject_name, len(face_paths), len(audio_paths), age)
 
+    if progress_cb:
+        progress_cb("phase", phase="models",
+                    faces=len(face_paths), audio_segs=len(audio_paths),
+                    desc=f"正在运行健康分析模型（{len(face_paths)} 张图像，{len(audio_paths)} 段音频）")
+
     # Run all modules in parallel threads
     with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
-        f_faceage = executor.submit(_run_faceage, face_paths)
-        f_facettd = executor.submit(_run_facettd, face_paths, age)
+        f_faceage = executor.submit(_run_faceage, face_paths, progress_cb)
+        f_facettd = executor.submit(_run_facettd, face_paths, age, progress_cb)
         f_parkinson = executor.submit(
             _run_audio_disease_module, "parkinsons", audio_paths,
-            "prob_parkinson", "label",
+            "prob_parkinson", "label", progress_cb,
         )
         f_lung = executor.submit(
             _run_audio_disease_module, "lung_cancer", audio_paths,
-            "probability", "label",
+            "probability", "label", progress_cb,
         )
         f_skin = (
             executor.submit(
                 _run_image_disease_module, "skin_disease", face_paths,
-                "probability", "label",
+                "probability", "label", progress_cb,
             )
             if include_skin_disease else None
         )
@@ -321,7 +373,6 @@ def aggregate_sample(
         lung_result = f_lung.result()
         skin_result = f_skin.result() if f_skin is not None else None
 
-    # Fill age_delta in FaceAgeResult
     if (
         faceage_result.biological_age_median is not None
         and faceage_result.status == "ok"

@@ -24,7 +24,7 @@ import sys
 from collections import defaultdict
 from datetime import datetime, date
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT_DIR))
@@ -323,6 +323,7 @@ def _merge_same_day_points(points: list[TimelinePoint]) -> list[TimelinePoint]:
 def build_timeline(
     subject_name: str,
     analyses: list[SampleAnalysisResult],
+    progress_cb: Optional[Callable] = None,
 ) -> LifetimeTimeline:
     """
     Build a LifetimeTimeline from one or more SampleAnalysisResult objects.
@@ -340,23 +341,40 @@ def build_timeline(
     Returns:
         LifetimeTimeline sorted ascending by captured_at.
     """
+    def _cb(event_type: str, **data):
+        if progress_cb:
+            try:
+                progress_cb(event_type, **data)
+            except Exception:
+                pass
+
+    has_llm = bool(os.environ.get("LLM_API_KEY", "").strip())
     points: list[TimelinePoint] = []
 
     for analysis in analyses:
-        logger.info(
-            "[%s] 构建时间轴点 @ %s …",
-            subject_name, analysis.captured_at.strftime("%Y-%m-%d"),
-        )
+        day = analysis.captured_at.strftime("%Y-%m-%d")
+        logger.info("[%s] 构建时间轴点 @ %s …", subject_name, day)
 
         prompt = _build_workflow_prompt(analysis)
         analysis.llm_prompt = prompt
+
+        if has_llm:
+            _cb("phase", phase="llm",
+                desc=f"调用 LLM 综合分析 {day} 的数据…")
+        else:
+            _cb("phase", phase="llm",
+                desc=f"LLM 未配置，直接使用 facettd 估计值（{day}）")
 
         llm_result = _call_llm(prompt)
 
         if llm_result:
             logger.info("[%s] LLM 响应成功", subject_name)
+            _cb("step", step="llm_done", status="ok",
+                desc=f"✓ LLM 综合分析完成（{day}）")
         else:
             logger.info("[%s] LLM 未配置或调用失败，使用模块直接输出", subject_name)
+            _cb("step", step="llm_done", status="fallback",
+                desc=f"✓ 使用 facettd 直接估计（{day}，无 LLM）")
 
         point = _analysis_to_timeline_point(analysis, llm_result)
         points.append(point)

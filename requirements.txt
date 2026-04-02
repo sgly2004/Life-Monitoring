@@ -5,6 +5,7 @@ python-multipart>=0.0.9
 pydantic>=2.0
 jinja2>=3.1.4
 pyyaml>=6.0
+python-dotenv>=1.0.0
 
 # ── Shared ML utilities ──────────────────────────────────────
 numpy<2.0

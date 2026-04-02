@@ -8,74 +8,45 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
   <style>
     body { background: var(--bg-page, #f3f4f6); }
-
     .page-wrap {
-      max-width: 900px;
-      margin: 0 auto;
+      max-width: 900px; margin: 0 auto;
       padding: 28px 24px 60px;
-      display: flex;
-      flex-direction: column;
-      gap: 28px;
+      display: flex; flex-direction: column; gap: 28px;
     }
 
-    /* ── Section header ── */
+    /* section header */
     .section-num {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      width: 26px; height: 26px;
-      border-radius: 50%;
-      background: var(--accent, #3b82f6);
-      color: #fff;
-      font-size: 13px;
-      font-weight: 700;
-      flex-shrink: 0;
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 26px; height: 26px; border-radius: 50%;
+      background: var(--accent, #3b82f6); color: #fff;
+      font-size: 13px; font-weight: 700; flex-shrink: 0;
     }
     .section-title {
-      font-size: 16px;
-      font-weight: 700;
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      margin-bottom: 20px;
+      font-size: 16px; font-weight: 700;
+      display: flex; align-items: center; gap: 10px; margin-bottom: 20px;
     }
 
-    /* ── Person tabs ── */
+    /* tabs */
     .person-tabs {
-      display: flex;
-      border: 1px solid var(--border, #e5e7eb);
-      border-radius: 8px;
-      overflow: hidden;
-      margin-bottom: 18px;
+      display: flex; border: 1px solid var(--border, #e5e7eb);
+      border-radius: 8px; overflow: hidden; margin-bottom: 18px;
     }
     .person-tab {
-      flex: 1;
-      padding: 10px 0;
-      text-align: center;
-      font-size: 13px;
-      font-weight: 600;
-      cursor: pointer;
-      background: var(--bg, #fff);
-      color: var(--text-2, #6b7280);
-      border: none;
-      transition: background .15s, color .15s;
+      flex: 1; padding: 10px 0; text-align: center;
+      font-size: 13px; font-weight: 600; cursor: pointer;
+      background: var(--bg, #fff); color: var(--text-2, #6b7280);
+      border: none; transition: background .15s, color .15s;
     }
     .person-tab.active { background: var(--accent, #3b82f6); color: #fff; }
 
-    /* ── Subject grid ── */
+    /* subject grid */
     .subject-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-      gap: 10px;
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px;
     }
     .subject-chip {
-      padding: 10px 12px;
-      border: 2px solid var(--border, #e5e7eb);
-      border-radius: 8px;
-      cursor: pointer;
-      background: var(--bg, #fff);
-      transition: border-color .15s, background .15s;
-      text-align: center;
+      padding: 10px 12px; border: 2px solid var(--border, #e5e7eb);
+      border-radius: 8px; cursor: pointer; background: var(--bg, #fff);
+      transition: border-color .15s; text-align: center;
     }
     .subject-chip:hover { border-color: var(--accent, #3b82f6); }
     .subject-chip.selected { border-color: var(--accent); background: #eff6ff; color: var(--accent); }
@@ -83,153 +54,140 @@
     .chip-count { font-size: 11px; color: var(--muted, #9ca3af); margin-top: 2px; }
     .no-subjects { font-size: 13px; color: var(--muted, #9ca3af); padding: 8px 0; }
 
-    /* ── Fields ── */
+    /* fields */
     .field { margin-bottom: 14px; }
     .field label {
-      display: block;
-      font-size: 11px;
-      font-weight: 700;
-      color: var(--text-2, #6b7280);
-      text-transform: uppercase;
-      letter-spacing: .05em;
-      margin-bottom: 5px;
+      display: block; font-size: 11px; font-weight: 700; color: var(--text-2);
+      text-transform: uppercase; letter-spacing: .05em; margin-bottom: 5px;
     }
     .field input[type="text"],
     .field input[type="date"],
     .field input[type="number"],
     .field select {
-      width: 100%;
-      box-sizing: border-box;
-      padding: 8px 10px;
-      border: 1px solid var(--border, #e5e7eb);
-      border-radius: 6px;
-      font-size: 13px;
-      background: var(--bg, #fff);
-      color: var(--text, #111);
+      width: 100%; box-sizing: border-box; padding: 8px 10px;
+      border: 1px solid var(--border, #e5e7eb); border-radius: 6px;
+      font-size: 13px; background: var(--bg, #fff); color: var(--text, #111);
     }
     .field input[type="file"] {
-      width: 100%;
-      box-sizing: border-box;
-      padding: 6px 8px;
-      border: 1px solid var(--border, #e5e7eb);
-      border-radius: 6px;
-      font-size: 13px;
-      cursor: pointer;
+      width: 100%; box-sizing: border-box; padding: 6px 8px;
+      border: 1px solid var(--border, #e5e7eb); border-radius: 6px;
+      font-size: 13px; cursor: pointer;
     }
     .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-
     .divider { border: none; border-top: 1px solid var(--border, #e5e7eb); margin: 18px 0; }
 
-    /* ── Video list ── */
+    /* video list */
     .video-list { display: flex; flex-direction: column; gap: 10px; }
     .video-entry {
-      border: 1px solid var(--border, #e5e7eb);
-      border-radius: 8px;
-      padding: 12px 14px;
-      background: var(--bg-2, #f9fafb);
+      border: 1px solid var(--border, #e5e7eb); border-radius: 8px;
+      padding: 12px 14px; background: var(--bg-2, #f9fafb);
     }
     .video-entry-head {
-      display: flex; align-items: center; justify-content: space-between;
-      margin-bottom: 10px;
+      display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;
     }
     .video-entry-head span { font-size: 13px; font-weight: 700; color: var(--text-2); }
     .remove-btn {
-      background: none; border: none; cursor: pointer;
-      color: var(--muted, #9ca3af); font-size: 17px; padding: 0 2px;
+      background: none; border: none; cursor: pointer; color: var(--muted); font-size: 17px; padding: 0 2px;
     }
     .remove-btn:hover { color: #ef4444; }
     .btn-add-video {
-      width: 100%;
-      padding: 9px;
-      background: none;
-      border: 1px dashed var(--border, #e5e7eb);
-      border-radius: 6px;
-      color: var(--text-2, #6b7280);
-      cursor: pointer;
-      font-size: 13px;
-      margin-top: 6px;
+      width: 100%; padding: 9px; background: none;
+      border: 1px dashed var(--border, #e5e7eb); border-radius: 6px;
+      color: var(--text-2); cursor: pointer; font-size: 13px; margin-top: 6px;
     }
     .btn-add-video:hover { border-color: var(--accent); color: var(--accent); }
 
-    /* ── Options ── */
+    /* options */
     .options-row { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; }
-    .options-row label {
-      font-size: 13px;
-      display: flex; align-items: center; gap: 6px; cursor: pointer;
-    }
+    .options-row label { font-size: 13px; display: flex; align-items: center; gap: 6px; cursor: pointer; }
     .th-pair { display: flex; gap: 12px; }
     .th-field { display: flex; align-items: center; gap: 6px; }
     .th-field label { font-size: 12px; color: var(--text-2); white-space: nowrap; }
-    .th-field input {
-      width: 68px; padding: 5px 7px;
-      border: 1px solid var(--border); border-radius: 5px; font-size: 12px;
-    }
+    .th-field input { width: 68px; padding: 5px 7px; border: 1px solid var(--border); border-radius: 5px; font-size: 12px; }
 
-    /* ── Submit ── */
+    /* submit */
     .btn-submit {
       width: 100%; padding: 13px;
       background: var(--accent, #3b82f6); color: #fff;
-      border: none; border-radius: 8px;
-      font-size: 15px; font-weight: 700; cursor: pointer;
-      display: flex; align-items: center; justify-content: center; gap: 8px;
-      margin-top: 20px;
-      transition: opacity .15s;
+      border: none; border-radius: 8px; font-size: 15px; font-weight: 700;
+      cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px;
+      margin-top: 20px; transition: opacity .15s;
     }
     .btn-submit:disabled { opacity: .55; cursor: not-allowed; }
     .btn-submit:not(:disabled):hover { opacity: .9; }
 
-    /* ── Status ── */
+    /* progress panel */
+    #progressPanel {
+      border: 1px solid var(--border, #e5e7eb); border-radius: 10px;
+      overflow: hidden; display: none;
+    }
+    .progress-header {
+      background: var(--bg-2, #f9fafb); padding: 10px 14px;
+      font-size: 12px; font-weight: 700; color: var(--text-2);
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .progress-body { max-height: 280px; overflow-y: auto; padding: 0; }
+    .progress-phase {
+      display: flex; align-items: center; gap: 8px;
+      padding: 10px 14px; background: #eff6ff;
+      border-top: 1px solid var(--border);
+      font-size: 13px; font-weight: 700; color: #1d4ed8;
+    }
+    .progress-step {
+      display: flex; align-items: flex-start; gap: 8px;
+      padding: 6px 14px 6px 36px; border-top: 1px solid #f0f0f0;
+      font-size: 12px; color: var(--text-2);
+      line-height: 1.5;
+    }
+    .progress-model {
+      display: flex; align-items: center; gap: 10px;
+      padding: 6px 14px 6px 36px; border-top: 1px solid #f0f0f0;
+      font-size: 12px;
+    }
+    .model-label { width: 110px; flex-shrink: 0; color: var(--text); font-weight: 600; }
+    .model-bar-wrap { flex: 1; height: 6px; background: #e5e7eb; border-radius: 3px; overflow: hidden; }
+    .model-bar { height: 100%; background: var(--accent, #3b82f6); border-radius: 3px; transition: width .25s; }
+    .model-count { font-size: 11px; color: var(--muted); min-width: 50px; text-align: right; }
+    .model-tick { color: #16a34a; font-size: 13px; }
+
+    /* status bar */
     .status-bar { padding: 11px 14px; border-radius: 8px; font-size: 13px; display: none; }
     .status-bar.info    { background: #eff6ff; color: #1d4ed8; display: block; }
     .status-bar.error   { background: #fef2f2; color: #dc2626; display: block; }
     .status-bar.success { background: #f0fdf4; color: #16a34a; display: block; }
 
-    /* ── Results ── */
+    /* results */
     .chart-wrapper { position: relative; height: 320px; }
-
     .point-list { margin-top: 16px; display: flex; flex-direction: column; gap: 10px; }
     .point-card {
-      border: 1px solid var(--border, #e5e7eb);
-      border-radius: 8px; padding: 14px 16px; background: var(--bg, #fff);
+      border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; background: var(--bg);
     }
     .pt-meta { font-size: 12px; font-weight: 700; color: var(--text-2); margin-bottom: 6px; }
-    .pt-estimate { font-size: 24px; font-weight: 800; color: var(--accent, #3b82f6); }
-    .pt-range { font-size: 12px; color: var(--muted, #9ca3af); margin-left: 8px; }
+    .pt-estimate { font-size: 24px; font-weight: 800; color: var(--accent); }
+    .pt-range { font-size: 12px; color: var(--muted); margin-left: 8px; }
     .pt-summary { font-size: 13px; color: var(--text); margin-top: 8px; line-height: 1.65; }
     .factor-tags { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
     .factor-tag {
-      padding: 2px 8px;
-      background: var(--bg-2, #f9fafb);
-      border: 1px solid var(--border, #e5e7eb);
+      padding: 2px 8px; background: var(--bg-2); border: 1px solid var(--border);
       border-radius: 12px; font-size: 11px; color: var(--text-2);
     }
+    .empty-state { text-align: center; padding: 48px 0; color: var(--muted); }
+    .empty-state .es-icon { font-size: 52px; }
+    .empty-state .es-title { font-size: 16px; font-weight: 700; color: var(--text-2); margin-top: 12px; }
+    .empty-state .es-hint { font-size: 13px; margin-top: 6px; }
+    .selected-badge {
+      display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px;
+      background: #eff6ff; color: var(--accent); border: 1px solid var(--accent);
+      border-radius: 12px; font-size: 12px; font-weight: 700; margin-top: 10px;
+    }
 
-    /* ── Spinner ── */
+    /* spinner */
     .spinner {
       display: inline-block; width: 14px; height: 14px;
       border: 2px solid currentColor; border-top-color: transparent;
       border-radius: 50%; animation: spin .7s linear infinite; vertical-align: middle;
     }
     @keyframes spin { to { transform: rotate(360deg); } }
-
-    /* ── Empty state ── */
-    .empty-state {
-      text-align: center; padding: 48px 0; color: var(--muted, #9ca3af);
-    }
-    .empty-state .es-icon { font-size: 52px; }
-    .empty-state .es-title {
-      font-size: 16px; font-weight: 700; color: var(--text-2); margin-top: 12px;
-    }
-    .empty-state .es-hint { font-size: 13px; margin-top: 6px; }
-
-    /* ── Selected person badge ── */
-    .selected-badge {
-      display: inline-flex; align-items: center; gap: 6px;
-      padding: 4px 10px;
-      background: #eff6ff; color: var(--accent);
-      border: 1px solid var(--accent); border-radius: 12px;
-      font-size: 12px; font-weight: 700; margin-top: 10px;
-    }
   </style>
 </head>
 <body>
@@ -250,22 +208,19 @@
 
 <div class="page-wrap">
 
-  <!-- ═══════════════════════════════════════════════
-       PART 1 — 上传材料
-  ═══════════════════════════════════════════════ -->
+  <!-- ═══ PART 1 — 上传材料 ═══════════════════════════════════════ -->
   <div class="card">
     <div class="section-title">
       <span class="section-num">1</span>
       上传材料
     </div>
 
-    <!-- Person tabs -->
     <div class="person-tabs">
       <button class="person-tab active" id="tabExisting" onclick="switchTab('existing')">选择已有人物</button>
       <button class="person-tab"        id="tabNew"      onclick="switchTab('new')">新建人物</button>
     </div>
 
-    <!-- ── Existing person panel ── -->
+    <!-- existing panel -->
     <div id="panelExisting">
       <div id="subjectGrid" class="subject-grid">
         <div class="no-subjects">正在加载…</div>
@@ -273,13 +228,16 @@
       <div id="selectedBadge" style="display:none" class="selected-badge">
         <span>✓</span><span id="selectedName"></span>
       </div>
-
-      <!-- Anchor files required even for existing subjects (for identity matching) -->
       <div style="margin-top:16px">
         <div style="font-size:11px;font-weight:700;color:var(--text-2);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">
-          锚点文件（每次上传视频时需提供以确认身份）
+          锚点文件（每次上传视频均需提供，用于身份确认）
         </div>
         <div class="field-row">
+          <div class="field" style="margin-bottom:0">
+            <label>出生日期</label>
+            <input type="date" id="existingBirthDate" />
+          </div>
+          <div style="display:contents"><!-- spacer --></div>
           <div class="field" style="margin-bottom:0">
             <label>锚点照片</label>
             <input type="file" id="existingFace" accept="image/*" />
@@ -292,7 +250,7 @@
       </div>
     </div>
 
-    <!-- ── New person panel ── -->
+    <!-- new panel -->
     <div id="panelNew" style="display:none">
       <div class="field">
         <label>姓名 / ID</label>
@@ -317,17 +275,14 @@
 
     <hr class="divider" />
 
-    <!-- ── Video uploads ── -->
     <div style="font-size:13px;font-weight:700;color:var(--text-2);margin-bottom:12px">
-      📹 视频样本（每条填写拍摄日期即可）
+      📹 视频样本（每条填写拍摄日期即可，年龄自动计算）
     </div>
-
     <div class="video-list" id="videoList"></div>
     <button class="btn-add-video" id="addVideoBtn">＋ 添加视频</button>
 
     <hr class="divider" />
 
-    <!-- ── Options ── -->
     <div class="options-row">
       <label>
         <input type="checkbox" id="includeSkin" />
@@ -351,12 +306,19 @@
     </button>
   </div>
 
-  <!-- Status bar -->
+  <!-- ═══ 进展面板 ═══════════════════════════════════════════════ -->
+  <div id="progressPanel">
+    <div class="progress-header">
+      <span>📊 处理进展</span>
+      <span id="progressSummary" style="font-weight:400;color:var(--muted)"></span>
+    </div>
+    <div class="progress-body" id="progressBody"></div>
+  </div>
+
+  <!-- status bar -->
   <div class="status-bar" id="statusBar"></div>
 
-  <!-- ═══════════════════════════════════════════════
-       PART 2 — 剩余寿命预测曲线
-  ═══════════════════════════════════════════════ -->
+  <!-- ═══ PART 2 — 剩余寿命预测曲线 ═══════════════════════════════ -->
   <div class="card">
     <div class="section-title">
       <span class="section-num">2</span>
@@ -364,14 +326,15 @@
       <span id="resultLabel" style="font-size:13px;font-weight:600;color:var(--accent);margin-left:auto"></span>
     </div>
 
-    <!-- Empty state -->
     <div class="empty-state" id="emptyState">
       <div class="es-icon">📉</div>
       <div class="es-title">选择人物后曲线将展示在此处</div>
-      <div class="es-hint">每次「开始分析」都会在曲线上添加新的时间点，历史记录会自动保留</div>
+      <div class="es-hint">
+        没有配置 LLM 也会有结果，直接使用 facettd 模型的估计值。<br>
+        每次「开始分析」会自动合并到历史曲线，刷新页面不丢失。
+      </div>
     </div>
 
-    <!-- Chart + cards -->
     <div id="chartArea" style="display:none">
       <div class="chart-wrapper">
         <canvas id="lifetimeChart"></canvas>
@@ -389,6 +352,9 @@ let selectedSubject = null;
 let videoCount = 0;
 let chart = null;
 
+// per-model progress tracking
+const modelState = {};
+
 // ─── boot ─────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
   loadSubjects();
@@ -396,7 +362,7 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('addVideoBtn').addEventListener('click', addVideoEntry);
 });
 
-// ─── tab switching ─────────────────────────────────────────────────────────
+// ─── tabs ──────────────────────────────────────────────────────────────────
 function switchTab(tab) {
   activeTab = tab;
   document.getElementById('tabExisting').classList.toggle('active', tab === 'existing');
@@ -408,21 +374,19 @@ function switchTab(tab) {
   clearResults();
 }
 
-// ─── load subject list ─────────────────────────────────────────────────────
+// ─── subjects ─────────────────────────────────────────────────────────────
 async function loadSubjects() {
   try {
     const resp = await fetch('/api/workflow/subjects');
     const data = await resp.json();
     renderSubjectGrid(data.subjects || []);
-  } catch (_) {
-    renderSubjectGrid([]);
-  }
+  } catch (_) { renderSubjectGrid([]); }
 }
 
 function renderSubjectGrid(subjects) {
   const grid = document.getElementById('subjectGrid');
   if (!subjects.length) {
-    grid.innerHTML = '<div class="no-subjects">暂无已有人物记录，请切换到「新建人物」。</div>';
+    grid.innerHTML = '<div class="no-subjects">暂无已有人物，请切换到「新建人物」。</div>';
     return;
   }
   grid.innerHTML = subjects.map(s => `
@@ -436,14 +400,12 @@ function renderSubjectGrid(subjects) {
 
 async function selectSubject(name, sampleCount) {
   selectedSubject = name;
-  // highlight chip
   document.querySelectorAll('.subject-chip').forEach(el => el.classList.remove('selected'));
   const chip = document.getElementById(`chip_${esc(name)}`);
   if (chip) chip.classList.add('selected');
-  // badge
   document.getElementById('selectedName').textContent = name;
   document.getElementById('selectedBadge').style.display = '';
-  // auto-load existing timeline
+
   if (sampleCount > 0) {
     try {
       showStatus('info', '<span class="spinner"></span> 正在加载历史曲线…');
@@ -452,13 +414,9 @@ async function selectSubject(name, sampleCount) {
         const data = await resp.json();
         renderResults(data);
         showStatus('success', `✓ 已加载 ${data.points.length} 个历史时间点`);
-      } else {
-        hideStatus();
-      }
+      } else { hideStatus(); }
     } catch (_) { hideStatus(); }
-  } else {
-    clearResults();
-  }
+  } else { clearResults(); }
 }
 
 // ─── video entries ─────────────────────────────────────────────────────────
@@ -506,6 +464,7 @@ function collectVideos() {
 function validate() {
   if (activeTab === 'existing') {
     if (!selectedSubject) return '请选择一个已有人物，或切换到「新建人物」';
+    if (!document.getElementById('existingBirthDate').value) return '请填写出生日期';
     if (!document.getElementById('existingFace').files.length)  return '请上传锚点照片';
     if (!document.getElementById('existingVoice').files.length) return '请上传锚点声音';
   } else {
@@ -522,66 +481,196 @@ function validate() {
   return null;
 }
 
-// ─── run analysis ─────────────────────────────────────────────────────────
+// ─── run analysis (SSE streaming) ─────────────────────────────────────────
 async function runAnalysis() {
   const err = validate();
   if (err) { showStatus('error', err); return; }
 
   setRunning(true);
-  showStatus('info', '<span class="spinner"></span> 正在处理，请耐心等待（可能需要数分钟）…');
+  showProgress(true);
+  clearProgressBody();
+  showStatus('info', '<span class="spinner"></span> 连接服务器…');
+
+  const fd = new FormData();
+  let birthDate;
+
+  if (activeTab === 'existing') {
+    fd.append('subject_name', selectedSubject);
+    birthDate = document.getElementById('existingBirthDate').value;
+    fd.append('anchor_face',  document.getElementById('existingFace').files[0]);
+    fd.append('anchor_voice', document.getElementById('existingVoice').files[0]);
+  } else {
+    fd.append('subject_name', document.getElementById('newName').value.trim());
+    birthDate = document.getElementById('newBirthDate').value;
+    fd.append('anchor_face',  document.getElementById('newFace').files[0]);
+    fd.append('anchor_voice', document.getElementById('newVoice').files[0]);
+  }
+  fd.append('birth_date', birthDate);
+  fd.append('include_skin_disease', document.getElementById('includeSkin').checked);
+  fd.append('face_threshold', document.getElementById('faceThreshold').value);
+  fd.append('voice_threshold', document.getElementById('voiceThreshold').value);
+
+  const videos = collectVideos();
+  for (const v of videos) {
+    fd.append('videos', v.file);
+    fd.append('dates', v.date);
+  }
 
   try {
-    const fd = new FormData();
-    let subjectName, birthDate;
-
-    if (activeTab === 'existing') {
-      subjectName = selectedSubject;
-      fd.append('anchor_face',  document.getElementById('existingFace').files[0]);
-      fd.append('anchor_voice', document.getElementById('existingVoice').files[0]);
-      // birth_date unknown for existing subjects — server will require it or use manifests
-      // For now pass empty (server will compute age only when birth_date is present)
-    } else {
-      subjectName = document.getElementById('newName').value.trim();
-      birthDate   = document.getElementById('newBirthDate').value;
-      fd.append('anchor_face',  document.getElementById('newFace').files[0]);
-      fd.append('anchor_voice', document.getElementById('newVoice').files[0]);
-      fd.append('birth_date', birthDate);
+    const response = await fetch('/api/workflow/analyze-stream', {
+      method: 'POST',
+      body: fd,
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.detail || `HTTP ${response.status}`);
     }
 
-    fd.append('subject_name', subjectName);
-    fd.append('include_skin_disease', document.getElementById('includeSkin').checked);
-    fd.append('face_threshold', document.getElementById('faceThreshold').value);
-    fd.append('voice_threshold', document.getElementById('voiceThreshold').value);
-
-    const videos = collectVideos();
-    for (const v of videos) {
-      fd.append('videos', v.file);
-      fd.append('dates', v.date);
-    }
-
-    const resp = await fetch('/api/workflow/analyze', { method: 'POST', body: fd });
-    const data = await resp.json();
-    if (!resp.ok) throw new Error(data.detail || `HTTP ${resp.status}`);
-
-    renderResults(data);
-    showStatus('success', `✓ 分析完成，曲线已更新（共 ${data.points.length} 个时间点）`);
-    loadSubjects();   // refresh chip counts
+    showStatus('info', '<span class="spinner"></span> 处理中，请耐心等待…');
+    await consumeSSE(response.body);
 
   } catch (e) {
     showStatus('error', `❌ ${e.message}`);
-  } finally {
     setRunning(false);
   }
 }
 
-// ─── render ───────────────────────────────────────────────────────────────
+async function consumeSSE(body) {
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+
+    // SSE chunks are separated by double newlines
+    const chunks = buffer.split('\n\n');
+    buffer = chunks.pop(); // keep incomplete last chunk
+
+    for (const chunk of chunks) {
+      const eventMatch = chunk.match(/^event:\s*(.+)$/m);
+      const dataMatch  = chunk.match(/^data:\s*(.+)$/ms);
+      if (!dataMatch) continue;
+      const eventType = eventMatch ? eventMatch[1].trim() : 'message';
+      let data;
+      try { data = JSON.parse(dataMatch[1].trim()); } catch (_) { continue; }
+      handleSSEEvent(eventType, data);
+    }
+  }
+
+  setRunning(false);
+}
+
+function handleSSEEvent(type, data) {
+  switch (type) {
+    case 'phase':
+      addPhaseRow(data.desc || data.phase);
+      document.getElementById('progressSummary').textContent = data.desc || '';
+      break;
+    case 'step':
+      addStepRow(data.desc || data.step);
+      break;
+    case 'model_progress':
+      updateModelBar(data);
+      break;
+    case 'done':
+      renderResults(data);
+      showStatus('success', `✓ 分析完成，共 ${(data.points || []).length} 个时间点`);
+      loadSubjects();
+      break;
+    case 'error':
+      showStatus('error', `❌ ${data.detail || '未知错误'}`);
+      break;
+  }
+}
+
+// ─── progress panel rendering ──────────────────────────────────────────────
+function showProgress(on) {
+  document.getElementById('progressPanel').style.display = on ? '' : 'none';
+}
+
+function clearProgressBody() {
+  document.getElementById('progressBody').innerHTML = '';
+  Object.keys(modelState).forEach(k => delete modelState[k]);
+}
+
+function addPhaseRow(text) {
+  const div = document.createElement('div');
+  div.className = 'progress-phase';
+  div.innerHTML = `<span class="spinner" style="flex-shrink:0"></span><span>${esc(text)}</span>`;
+  document.getElementById('progressBody').appendChild(div);
+  scrollProgressToBottom();
+}
+
+function addStepRow(text) {
+  const div = document.createElement('div');
+  div.className = 'progress-step';
+  div.innerHTML = `<span style="color:#9ca3af;margin-top:2px">›</span><span>${esc(text)}</span>`;
+  document.getElementById('progressBody').appendChild(div);
+  scrollProgressToBottom();
+}
+
+function updateModelBar(data) {
+  const model = data.model;
+  const current = data.current || 0;
+  const total = data.total || 1;
+  const done = data.done || false;
+  const pct = total > 0 ? Math.round(current / total * 100) : 100;
+
+  if (!modelState[model]) {
+    // Create bar row
+    const row = document.createElement('div');
+    row.className = 'progress-model';
+    row.id = `model_row_${model}`;
+    const labels = {
+      faceage: 'FaceAge（生物年龄）',
+      facettd: 'facettd（寿命预测）',
+      parkinsons: 'Parkinsons（帕金森）',
+      lung_cancer: 'LungCancer（肺癌）',
+      skin_disease: 'SkinDisease（皮肤）',
+    };
+    row.innerHTML = `
+      <span class="model-label">${labels[model] || model}</span>
+      <div class="model-bar-wrap"><div class="model-bar" id="bar_${model}" style="width:0%"></div></div>
+      <span class="model-count" id="cnt_${model}"></span>
+      <span id="tick_${model}"></span>
+    `;
+    document.getElementById('progressBody').appendChild(row);
+    modelState[model] = true;
+    scrollProgressToBottom();
+  }
+
+  const bar = document.getElementById(`bar_${model}`);
+  const cnt = document.getElementById(`cnt_${model}`);
+  const tick = document.getElementById(`tick_${model}`);
+  if (bar) bar.style.width = pct + '%';
+  if (cnt) {
+    if (total > 1) {
+      cnt.textContent = `${current}/${total}`;
+    } else if (data.value !== undefined) {
+      cnt.textContent = data.value;
+    }
+  }
+  if (done && tick) {
+    tick.className = 'model-tick';
+    tick.textContent = '✓';
+    if (bar) bar.style.background = '#16a34a';
+  }
+}
+
+function scrollProgressToBottom() {
+  const body = document.getElementById('progressBody');
+  body.scrollTop = body.scrollHeight;
+}
+
+// ─── results ──────────────────────────────────────────────────────────────
 function renderResults(data) {
   document.getElementById('emptyState').style.display = 'none';
   document.getElementById('chartArea').style.display  = '';
   document.getElementById('resultLabel').textContent  = data.subject_name || '';
-
   renderChart(data.points || []);
-
   const list = document.getElementById('pointList');
   list.innerHTML = '';
   for (const pt of (data.points || [])) list.appendChild(buildPointCard(pt));
@@ -589,7 +678,6 @@ function renderResults(data) {
 
 function renderChart(points) {
   if (chart) { chart.destroy(); chart = null; }
-
   const labels    = points.map(p => p.captured_at.slice(0, 10));
   const estimates = points.map(p => p.remaining_life_estimate >= 0 ? p.remaining_life_estimate : null);
   const lows      = points.map(p => p.uncertainty_low);
@@ -604,32 +692,26 @@ function renderChart(points) {
         {
           label: '剩余寿命估计（年）',
           data: estimates,
-          borderColor: '#3b82f6',
-          backgroundColor: 'rgba(59,130,246,0.08)',
+          borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,0.08)',
           pointRadius: 5, pointBackgroundColor: '#3b82f6',
           tension: 0.35, fill: false, order: 1,
         },
         {
           label: '不确定性上界',
           data: highs,
-          borderColor: 'rgba(156,163,175,0.45)',
-          backgroundColor: 'rgba(156,163,175,0.1)',
-          pointRadius: 0, borderDash: [5, 4],
-          fill: '+1', tension: 0.35, order: 2,
+          borderColor: 'rgba(156,163,175,0.45)', backgroundColor: 'rgba(156,163,175,0.1)',
+          pointRadius: 0, borderDash: [5, 4], fill: '+1', tension: 0.35, order: 2,
         },
         {
           label: '不确定性下界',
           data: lows,
-          borderColor: 'rgba(156,163,175,0.45)',
-          backgroundColor: 'rgba(156,163,175,0.1)',
-          pointRadius: 0, borderDash: [5, 4],
-          fill: false, tension: 0.35, order: 3,
+          borderColor: 'rgba(156,163,175,0.45)', backgroundColor: 'rgba(156,163,175,0.1)',
+          pointRadius: 0, borderDash: [5, 4], fill: false, tension: 0.35, order: 3,
         },
       ],
     },
     options: {
-      responsive: true,
-      maintainAspectRatio: false,
+      responsive: true, maintainAspectRatio: false,
       plugins: {
         legend: { labels: { boxWidth: 12, font: { size: 12 } } },
         tooltip: {
@@ -669,7 +751,7 @@ function buildPointCard(pt) {
   return card;
 }
 
-// ─── ui helpers ───────────────────────────────────────────────────────────
+// ─── UI helpers ───────────────────────────────────────────────────────────
 function setRunning(on) {
   const btn = document.getElementById('runBtn');
   btn.disabled = on;
@@ -684,8 +766,9 @@ function showStatus(type, msg) {
 }
 
 function hideStatus() {
-  document.getElementById('statusBar').className = 'status-bar';
-  document.getElementById('statusBar').innerHTML = '';
+  const bar = document.getElementById('statusBar');
+  bar.className = 'status-bar';
+  bar.innerHTML = '';
 }
 
 function clearResults() {

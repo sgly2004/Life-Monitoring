@@ -21,17 +21,27 @@ Start:
   uvicorn web.app:app --reload --port 8000
 """
 from __future__ import annotations
+import asyncio
 import concurrent.futures
 import json as _json
 import os
+import queue as _sync_queue
 import sys
 import shutil
+import threading
 import uuid
 from pathlib import Path
 from typing import List, Optional
 
+# Load .env (if present) before anything reads os.environ
+try:
+    from dotenv import load_dotenv
+    load_dotenv(Path(__file__).resolve().parent.parent / ".env", override=False)
+except ImportError:
+    pass  # python-dotenv not installed; rely on shell environment
+
 from fastapi import FastAPI, File, Form, UploadFile, HTTPException
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 import yaml
@@ -854,6 +864,230 @@ async def voice_split(
         raise HTTPException(status_code=500, detail=str(exc))
     finally:
         shutil.rmtree(session_dir, ignore_errors=True)
+
+
+# ── Workflow: streaming lifetime-curve pipeline (SSE) ────────────────────────
+
+@app.post("/api/workflow/analyze-stream")
+async def workflow_analyze_stream(
+    subject_name: str = Form(...),
+    anchor_face: UploadFile = File(...),
+    anchor_voice: UploadFile = File(...),
+    birth_date: Optional[str] = Form(None),
+    videos: List[UploadFile] = File(...),
+    dates: List[str] = Form(...),
+    include_skin_disease: bool = Form(False),
+    face_threshold: float = Form(0.70),
+    voice_threshold: float = Form(0.75),
+):
+    """
+    Same as /api/workflow/analyze but returns Server-Sent Events for real-time
+    progress reporting.
+
+    SSE event types emitted:
+        phase        — major phase started (phase, desc)
+        step         — sub-step within a phase (step, desc, ...)
+        model_progress — per-model per-item progress (model, current, total, desc)
+        done         — pipeline finished successfully (timeline JSON payload)
+        error        — pipeline failed (detail)
+    """
+    import json as _j
+    from datetime import datetime as _dt, date as _date
+
+    if len(videos) != len(dates):
+        raise HTTPException(
+            status_code=422,
+            detail="videos and dates must have the same number of items",
+        )
+
+    parsed_birth_date: Optional[_date] = None
+    if birth_date:
+        try:
+            parsed_birth_date = _date.fromisoformat(birth_date)
+        except ValueError:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Invalid birth_date: '{birth_date}'. Use YYYY-MM-DD.",
+            )
+
+    # ── Read all uploaded files before starting the background thread ─────────
+    session_id = str(uuid.uuid4())[:8]
+    session_dir = UPLOADS_DIR / f"__session_{session_id}"
+    session_dir.mkdir(parents=True, exist_ok=True)
+
+    face_ext = Path(anchor_face.filename).suffix.lower() if anchor_face.filename else ".jpg"
+    face_bytes = await anchor_face.read()
+    face_path = session_dir / f"anchor_face{face_ext}"
+    face_path.write_bytes(face_bytes)
+
+    voice_ext = Path(anchor_voice.filename).suffix.lower() if anchor_voice.filename else ".wav"
+    voice_bytes = await anchor_voice.read()
+    voice_path = session_dir / f"anchor_voice{voice_ext}"
+    voice_path.write_bytes(voice_bytes)
+
+    video_meta: list[tuple[Path, str]] = []
+    for i, (video_upload, date_str) in enumerate(zip(videos, dates)):
+        vid_ext = Path(video_upload.filename).suffix.lower() if video_upload.filename else ".mp4"
+        vid_bytes = await video_upload.read()
+        vid_path = session_dir / f"video_{i:02d}{vid_ext}"
+        vid_path.write_bytes(vid_bytes)
+        video_meta.append((vid_path, date_str))
+
+    # ── Set up progress queue + background thread ─────────────────────────────
+    progress_q: _sync_queue.Queue = _sync_queue.Queue()
+    result_box: list[Optional[dict]] = [None]
+    error_box: list[Optional[str]] = [None]
+    done_flag = threading.Event()
+
+    def run_pipeline():
+        import logging as _log
+        _pipeline_log = _log.getLogger(__name__)
+
+        def progress_cb(event_type: str, **data):
+            progress_q.put((event_type, data))
+
+        try:
+            from core.workflow_types import AnchorInput, VideoSample
+            from core.preprocess_pipeline import preprocess_sample
+            from core.result_aggregator import aggregate_sample
+            from core.timeline_builder import build_timeline
+
+            anchor = AnchorInput(
+                subject_name=subject_name,
+                birth_date=parsed_birth_date,
+                anchor_face_path=str(face_path),
+                anchor_voice_path=str(voice_path),
+            )
+
+            n_videos = len(video_meta)
+            analyses = []
+            for i, (vid_path, date_str) in enumerate(video_meta):
+                try:
+                    captured_at = _dt.fromisoformat(date_str)
+                except ValueError:
+                    error_box[0] = f"Invalid date: '{date_str}'"
+                    return
+
+                age_at_capture = anchor.compute_age(captured_at)
+                if age_at_capture is None:
+                    error_box[0] = "请提供出生日期（birth_date）以自动计算拍摄时年龄"
+                    return
+
+                from core.workflow_types import VideoSample
+                vs = VideoSample(
+                    video_path=str(vid_path),
+                    captured_at=captured_at,
+                    age_at_capture=age_at_capture,
+                )
+
+                progress_cb("phase", phase="preprocessing",
+                            video_idx=i + 1, total_videos=n_videos,
+                            desc=f"预处理第 {i + 1}/{n_videos} 个视频（{date_str}，时年 {age_at_capture} 岁）")
+
+                try:
+                    preprocessed = preprocess_sample(
+                        anchor=anchor,
+                        sample=vs,
+                        uploads_root=UPLOADS_DIR,
+                        face_threshold=face_threshold,
+                        voice_threshold=voice_threshold,
+                        progress_cb=progress_cb,
+                    )
+                    analysis = aggregate_sample(
+                        preprocessed,
+                        include_skin_disease=include_skin_disease,
+                        progress_cb=progress_cb,
+                    )
+                    analyses.append(analysis)
+                except Exception as exc:
+                    _pipeline_log.warning("Pipeline failed for video %s: %s", vid_path, exc)
+                    progress_cb("step", step="error",
+                                desc=f"⚠ 视频 {i + 1} 处理失败：{exc}")
+
+            if not analyses:
+                error_box[0] = "所有视频处理均失败，无法生成时间轴"
+                return
+
+            timeline = build_timeline(
+                subject_name=subject_name,
+                analyses=analyses,
+                progress_cb=progress_cb,
+            )
+            new_dict = _serialize_timeline(timeline)
+
+            # Persist + merge
+            subject_dir = UPLOADS_DIR / subject_name
+            subject_dir.mkdir(parents=True, exist_ok=True)
+            timeline_path = subject_dir / "timeline.json"
+            import json as __j
+            if timeline_path.exists():
+                try:
+                    existing = __j.loads(timeline_path.read_text(encoding="utf-8"))
+                    merged = _merge_timeline_dicts(existing, new_dict["points"])
+                    merged["subject_name"] = subject_name
+                    timeline_path.write_text(
+                        __j.dumps(merged, ensure_ascii=False, indent=2), encoding="utf-8"
+                    )
+                    result_box[0] = merged
+                except Exception:
+                    timeline_path.write_text(
+                        __j.dumps(new_dict, ensure_ascii=False, indent=2), encoding="utf-8"
+                    )
+                    result_box[0] = new_dict
+            else:
+                timeline_path.write_text(
+                    __j.dumps(new_dict, ensure_ascii=False, indent=2), encoding="utf-8"
+                )
+                result_box[0] = new_dict
+
+        except Exception as exc:
+            error_box[0] = str(exc)
+        finally:
+            done_flag.set()
+            try:
+                shutil.rmtree(session_dir, ignore_errors=True)
+            except Exception:
+                pass
+
+    thread = threading.Thread(target=run_pipeline, daemon=True)
+    thread.start()
+
+    # ── Async SSE generator ────────────────────────────────────────────────────
+    async def generate():
+        import json as __j
+
+        def encode(event_type: str, data: dict) -> str:
+            return f"event: {event_type}\ndata: {__j.dumps(data, ensure_ascii=False)}\n\n"
+
+        keepalive_counter = 0
+        while not done_flag.is_set() or not progress_q.empty():
+            # Drain available events
+            drained = 0
+            while not progress_q.empty() and drained < 20:
+                evt, data = progress_q.get_nowait()
+                yield encode(evt, data)
+                drained += 1
+            if not done_flag.is_set():
+                await asyncio.sleep(0.25)
+                keepalive_counter += 1
+                if keepalive_counter % 4 == 0:
+                    yield ": keep-alive\n\n"
+
+        # Drain any final events
+        while not progress_q.empty():
+            evt, data = progress_q.get_nowait()
+            yield encode(evt, data)
+
+        if error_box[0]:
+            yield encode("error", {"detail": error_box[0]})
+        elif result_box[0]:
+            yield encode("done", result_box[0])
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 # ── Normalizers ─────────────────────────────────────────────────────────────
