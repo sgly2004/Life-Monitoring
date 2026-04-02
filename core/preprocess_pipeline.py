@@ -159,6 +159,58 @@ def _select_top_faces(
     return [p for p in image_paths if p in top_paths]
 
 
+# ── Face crop from a single frame ────────────────────────────────────────────
+
+def _crop_face_from_frame(frame) -> Optional[object]:
+    """
+    Detect and crop the largest face from a BGR frame (numpy array).
+
+    Strategy:
+      1. Try frontal Haar cascade (scaleFactor 1.1, minNeighbors 4).
+      2. If none found, try profile Haar cascade (scaleFactor 1.1, minNeighbors 3).
+      3. If still none, return None (caller decides what to do with the full frame).
+
+    The crop includes 40 % padding around the detected bounding box so the
+    models have enough facial context.
+
+    Returns:
+        Cropped BGR image (numpy array) or None if no face detected.
+    """
+    try:
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        h_total, w_total = frame.shape[:2]
+
+        frontal = cv2.CascadeClassifier(
+            cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
+        )
+        faces = frontal.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=4,
+                                         minSize=(40, 40))
+
+        if len(faces) == 0:
+            profile = cv2.CascadeClassifier(
+                cv2.data.haarcascades + "haarcascade_profileface.xml"
+            )
+            faces = profile.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=3,
+                                             minSize=(40, 40))
+
+        if len(faces) == 0:
+            return None
+
+        # Largest detected face
+        x, y, w, h = max(faces, key=lambda f: f[2] * f[3])
+
+        # 40 % padding for model context
+        pad = int(max(w, h) * 0.4)
+        x1 = max(0, x - pad)
+        y1 = max(0, y - pad)
+        x2 = min(w_total, x + w + pad)
+        y2 = min(h_total, y + h + pad)
+
+        return frame[y1:y2, x1:x2]
+    except Exception:
+        return None
+
+
 # ── Frame extraction from video segments ─────────────────────────────────────
 
 def _extract_frames_from_segments(
@@ -168,16 +220,23 @@ def _extract_frames_from_segments(
     frames_per_second: float = 1.0,
 ) -> list[Path]:
     """
-    Extract frames from video at specified time segments using OpenCV.
+    Extract **face crops** from video segments using OpenCV + Haar cascade.
+
+    For each sampled frame:
+      - Attempt to detect and crop the face region (with 40 % padding).
+      - If a face is detected, save the crop.
+      - If no face is detected in a frame, skip it.
+      - Fallback: if zero face crops were obtained across ALL frames, save
+        the full frames instead (rare edge case).
 
     Args:
         video_path:        Input video file.
         segments:          List of {start_time, end_time, ...} dicts from FaceTrack.
-        output_dir:        Where to save extracted JPEGs.
-        frames_per_second: How many frames to extract per second of segment.
+        output_dir:        Where to save extracted face-crop JPEGs.
+        frames_per_second: How many frames to sample per second of segment.
 
     Returns:
-        List of extracted image paths (unsorted).
+        List of saved face-crop image paths.
     """
     output_dir.mkdir(parents=True, exist_ok=True)
     cap = cv2.VideoCapture(str(video_path))
@@ -188,12 +247,12 @@ def _extract_frames_from_segments(
     frame_step = max(1, int(video_fps / frames_per_second))
 
     saved_paths: list[Path] = []
+    fallback_frames: list[tuple[Path, object]] = []  # (path, frame) if no face found
     frame_counter = 0
 
     for seg in segments:
         start_s = float(seg.get("start_time", 0))
         end_s = float(seg.get("end_time", start_s + 1))
-
         start_frame = int(start_s * video_fps)
         end_frame = int(end_s * video_fps)
 
@@ -207,14 +266,31 @@ def _extract_frames_from_segments(
 
             if (current_frame - start_frame) % frame_step == 0:
                 ts_ms = int(current_frame * 1000 / video_fps)
-                out_path = output_dir / f"frame_{frame_counter:05d}_{ts_ms}ms.jpg"
-                cv2.imwrite(str(out_path), frame)
-                saved_paths.append(out_path)
+                out_path = output_dir / f"face_{frame_counter:05d}_{ts_ms}ms.jpg"
+
+                crop = _crop_face_from_frame(frame)
+                if crop is not None:
+                    cv2.imwrite(str(out_path), crop)
+                    saved_paths.append(out_path)
+                else:
+                    # Keep full frame as fallback candidate (not yet written)
+                    fallback_frames.append((out_path, frame))
+
                 frame_counter += 1
 
             current_frame += 1
 
     cap.release()
+
+    # If we got no face crops at all, fall back to saving full frames
+    if not saved_paths and fallback_frames:
+        logger.warning(
+            "未能从片段中检测到人脸，回退到保存 %d 帧完整画面", len(fallback_frames)
+        )
+        for path, frame in fallback_frames:
+            cv2.imwrite(str(path), frame)
+            saved_paths.append(path)
+
     return saved_paths
 
 

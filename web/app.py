@@ -436,49 +436,108 @@ async def split_by_voice(
         shutil.rmtree(session_dir, ignore_errors=True)
 
 
-# ── Workflow: list existing subjects ─────────────────────────────────────────
+# ── Workflow: subject management ──────────────────────────────────────────────
+
+def _load_profile(subject_name: str) -> Optional[dict]:
+    """Load profile.json for a subject, or None if it doesn't exist."""
+    path = UPLOADS_DIR / subject_name / "profile.json"
+    if path.exists():
+        try:
+            return _json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+    return None
+
+
+def _find_anchor_file(subject_name: str, kind: str) -> Optional[Path]:
+    """Find stored anchor file (kind='face' or 'voice') for a subject."""
+    subject_dir = UPLOADS_DIR / subject_name
+    for ext in (".jpg", ".jpeg", ".png", ".webp", ".wav", ".mp3", ".m4a", ".aac"):
+        p = subject_dir / f"anchor_{kind}{ext}"
+        if p.exists():
+            return p
+    return None
+
 
 @app.get("/api/workflow/subjects")
 async def list_subjects():
-    """
-    Return a list of subject names that already have saved uploads.
-    Scans uploads/<subject_name>/ directories for a manifest.json to confirm
-    at least one completed preprocessing run exists.
-    """
+    """List all subjects that have a profile or at least one preprocessing run."""
     subjects = []
     if UPLOADS_DIR.exists():
         for entry in sorted(UPLOADS_DIR.iterdir()):
-            if entry.is_dir() and not entry.name.startswith("__"):
-                # Check if any timestamp sub-directory has a manifest
-                has_data = any(
-                    (sub / "manifest.json").exists()
-                    for sub in entry.iterdir()
-                    if sub.is_dir()
-                )
-                if has_data:
-                    # Find anchor face/voice paths from the first manifest
-                    anchor_face = None
-                    anchor_voice = None
-                    try:
-                        manifests = sorted(
-                            sub / "manifest.json"
-                            for sub in entry.iterdir()
-                            if sub.is_dir() and (sub / "manifest.json").exists()
-                        )
-                        if manifests:
-                            import json as _json
-                            m = _json.loads(manifests[0].read_text(encoding="utf-8"))
-                            # Anchors aren't in manifest — just report name + count
-                    except Exception:
-                        pass
-                    subjects.append({
-                        "subject_name": entry.name,
-                        "sample_count": sum(
-                            1 for sub in entry.iterdir()
-                            if sub.is_dir() and (sub / "manifest.json").exists()
-                        ),
-                    })
+            if not entry.is_dir() or entry.name.startswith("__"):
+                continue
+            profile = _load_profile(entry.name) or {}
+            has_anchor_face = _find_anchor_file(entry.name, "face") is not None
+            sample_count = sum(
+                1 for sub in entry.iterdir()
+                if sub.is_dir() and (sub / "manifest.json").exists()
+            )
+            if has_anchor_face or sample_count > 0:
+                subjects.append({
+                    "subject_name": entry.name,
+                    "birth_date":   profile.get("birth_date"),
+                    "has_anchor_face":  has_anchor_face,
+                    "has_anchor_voice": _find_anchor_file(entry.name, "voice") is not None,
+                    "sample_count": sample_count,
+                })
     return JSONResponse(content={"subjects": subjects})
+
+
+@app.post("/api/workflow/subjects")
+async def create_subject(
+    subject_name: str = Form(...),
+    birth_date: str = Form(...),
+    anchor_face: UploadFile = File(...),
+    anchor_voice: UploadFile = File(...),
+):
+    """
+    Create a new subject profile.  Saves:
+        uploads/<subject_name>/profile.json
+        uploads/<subject_name>/anchor_face.<ext>
+        uploads/<subject_name>/anchor_voice.<ext>
+    """
+    from datetime import datetime as _dt2
+    subject_dir = UPLOADS_DIR / subject_name
+    subject_dir.mkdir(parents=True, exist_ok=True)
+
+    face_ext = Path(anchor_face.filename).suffix.lower() if anchor_face.filename else ".jpg"
+    face_path = subject_dir / f"anchor_face{face_ext}"
+    face_path.write_bytes(await anchor_face.read())
+
+    voice_ext = Path(anchor_voice.filename).suffix.lower() if anchor_voice.filename else ".wav"
+    voice_path = subject_dir / f"anchor_voice{voice_ext}"
+    voice_path.write_bytes(await anchor_voice.read())
+
+    profile = {
+        "subject_name":     subject_name,
+        "birth_date":       birth_date,
+        "anchor_face_file": f"anchor_face{face_ext}",
+        "anchor_voice_file": f"anchor_voice{voice_ext}",
+        "created_at":       _dt2.utcnow().isoformat(),
+    }
+    (subject_dir / "profile.json").write_text(
+        _json.dumps(profile, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    return JSONResponse(content=profile)
+
+
+@app.get("/api/workflow/subjects/{subject_name}/profile")
+async def get_subject_profile(subject_name: str):
+    """Return the stored profile for a subject."""
+    profile = _load_profile(subject_name)
+    if not profile:
+        raise HTTPException(status_code=404, detail="该人物尚无 profile，请先创建")
+    return JSONResponse(content=profile)
+
+
+@app.get("/api/workflow/subjects/{subject_name}/anchor-face")
+async def get_anchor_face(subject_name: str):
+    """Serve the stored anchor face image for a subject."""
+    p = _find_anchor_file(subject_name, "face")
+    if p is None:
+        raise HTTPException(status_code=404, detail="未找到锚点照片")
+    return FileResponse(str(p))
 
 
 # ── Workflow: load persisted timeline ────────────────────────────────────────
@@ -871,8 +930,10 @@ async def voice_split(
 @app.post("/api/workflow/analyze-stream")
 async def workflow_analyze_stream(
     subject_name: str = Form(...),
-    anchor_face: UploadFile = File(...),
-    anchor_voice: UploadFile = File(...),
+    # Anchor files are optional — if omitted, stored files from profile are used
+    anchor_face: Optional[UploadFile] = File(None),
+    anchor_voice: Optional[UploadFile] = File(None),
+    # birth_date is optional — if omitted, loaded from stored profile
     birth_date: Optional[str] = Form(None),
     videos: List[UploadFile] = File(...),
     dates: List[str] = Form(...),
@@ -881,15 +942,17 @@ async def workflow_analyze_stream(
     voice_threshold: float = Form(0.75),
 ):
     """
-    Same as /api/workflow/analyze but returns Server-Sent Events for real-time
-    progress reporting.
+    Streaming (SSE) lifetime-curve pipeline.
 
-    SSE event types emitted:
-        phase        — major phase started (phase, desc)
-        step         — sub-step within a phase (step, desc, ...)
-        model_progress — per-model per-item progress (model, current, total, desc)
-        done         — pipeline finished successfully (timeline JSON payload)
-        error        — pipeline failed (detail)
+    Anchor files and birth_date are optional when a profile already exists for
+    subject_name — the stored files will be used automatically.
+
+    SSE event types:
+        phase          — major phase started
+        step           — sub-step detail
+        model_progress — per-model per-item progress
+        done           — pipeline finished (full timeline JSON)
+        error          — pipeline failed
     """
     import json as _j
     from datetime import datetime as _dt, date as _date
@@ -900,30 +963,56 @@ async def workflow_analyze_stream(
             detail="videos and dates must have the same number of items",
         )
 
-    parsed_birth_date: Optional[_date] = None
-    if birth_date:
-        try:
-            parsed_birth_date = _date.fromisoformat(birth_date)
-        except ValueError:
-            raise HTTPException(
-                status_code=422,
-                detail=f"Invalid birth_date: '{birth_date}'. Use YYYY-MM-DD.",
-            )
+    # ── Resolve birth_date from form or stored profile ────────────────────────
+    profile = _load_profile(subject_name)
+    bd_str = birth_date or (profile.get("birth_date") if profile else None)
+    if not bd_str:
+        raise HTTPException(
+            status_code=422,
+            detail="请先创建该人物档案（含出生日期），或在请求中提供 birth_date",
+        )
+    try:
+        parsed_birth_date: _date = _date.fromisoformat(bd_str)
+    except ValueError:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Invalid birth_date: '{bd_str}'. Use YYYY-MM-DD.",
+        )
 
     # ── Read all uploaded files before starting the background thread ─────────
     session_id = str(uuid.uuid4())[:8]
     session_dir = UPLOADS_DIR / f"__session_{session_id}"
     session_dir.mkdir(parents=True, exist_ok=True)
 
-    face_ext = Path(anchor_face.filename).suffix.lower() if anchor_face.filename else ".jpg"
-    face_bytes = await anchor_face.read()
-    face_path = session_dir / f"anchor_face{face_ext}"
-    face_path.write_bytes(face_bytes)
+    # Anchor face: use uploaded file or fall back to stored profile file
+    if anchor_face is not None and anchor_face.filename:
+        face_ext = Path(anchor_face.filename).suffix.lower() or ".jpg"
+        face_path = session_dir / f"anchor_face{face_ext}"
+        face_path.write_bytes(await anchor_face.read())
+    else:
+        stored_face = _find_anchor_file(subject_name, "face")
+        if stored_face is None:
+            shutil.rmtree(session_dir, ignore_errors=True)
+            raise HTTPException(
+                status_code=422,
+                detail="未找到存储的锚点照片，请在创建人物时上传",
+            )
+        face_path = stored_face  # use stored directly
 
-    voice_ext = Path(anchor_voice.filename).suffix.lower() if anchor_voice.filename else ".wav"
-    voice_bytes = await anchor_voice.read()
-    voice_path = session_dir / f"anchor_voice{voice_ext}"
-    voice_path.write_bytes(voice_bytes)
+    # Anchor voice: use uploaded file or fall back to stored profile file
+    if anchor_voice is not None and anchor_voice.filename:
+        voice_ext = Path(anchor_voice.filename).suffix.lower() or ".wav"
+        voice_path = session_dir / f"anchor_voice{voice_ext}"
+        voice_path.write_bytes(await anchor_voice.read())
+    else:
+        stored_voice = _find_anchor_file(subject_name, "voice")
+        if stored_voice is None:
+            shutil.rmtree(session_dir, ignore_errors=True)
+            raise HTTPException(
+                status_code=422,
+                detail="未找到存储的锚点声音，请在创建人物时上传",
+            )
+        voice_path = stored_voice
 
     video_meta: list[tuple[Path, str]] = []
     for i, (video_upload, date_str) in enumerate(zip(videos, dates)):

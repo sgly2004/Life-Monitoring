@@ -3,455 +3,565 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>寿命曲线 Demo — Life Monitoring</title>
-  <link rel="stylesheet" href="/static/style.css" />
+  <title>寿命曲线 — Life Monitoring</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
   <style>
-    body { background: var(--bg-page, #f3f4f6); }
-    .page-wrap {
-      max-width: 900px; margin: 0 auto;
-      padding: 28px 24px 60px;
-      display: flex; flex-direction: column; gap: 28px;
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 14px; color: #1a1a1a; background: #f0f2f5;
+      height: 100vh; display: flex; flex-direction: column; overflow: hidden;
     }
 
-    /* section header */
-    .section-num {
-      display: inline-flex; align-items: center; justify-content: center;
-      width: 26px; height: 26px; border-radius: 50%;
-      background: var(--accent, #3b82f6); color: #fff;
-      font-size: 13px; font-weight: 700; flex-shrink: 0;
+    /* ── header ── */
+    .hdr {
+      display: flex; align-items: center; gap: 10px;
+      padding: 0 20px; height: 52px; background: #fff;
+      border-bottom: 1px solid #e5e7eb; flex-shrink: 0;
     }
-    .section-title {
-      font-size: 16px; font-weight: 700;
-      display: flex; align-items: center; gap: 10px; margin-bottom: 20px;
+    .hdr-logo { font-size: 20px; }
+    .hdr-title { font-size: 15px; font-weight: 700; }
+    .hdr-sub { font-size: 12px; color: #9ca3af; margin-left: 4px; }
+    .hdr-links { margin-left: auto; display: flex; gap: 16px; }
+    .hdr-links a { font-size: 12px; color: #6b7280; text-decoration: none; }
+    .hdr-links a:hover { color: #3b82f6; }
+
+    /* ── layout ── */
+    .layout { display: flex; flex: 1; min-height: 0; }
+
+    /* ── sidebar ── */
+    .sidebar {
+      width: 230px; flex-shrink: 0;
+      background: #fff; border-right: 1px solid #e5e7eb;
+      display: flex; flex-direction: column; overflow: hidden;
+    }
+    .sidebar-hd {
+      padding: 14px 14px 10px; font-size: 11px; font-weight: 700;
+      color: #9ca3af; text-transform: uppercase; letter-spacing: .06em;
+      border-bottom: 1px solid #f3f4f6; flex-shrink: 0;
+    }
+    .subject-list { flex: 1; overflow-y: auto; padding: 6px 8px; }
+    .subject-item {
+      display: flex; align-items: center; gap: 10px;
+      padding: 8px 8px; border-radius: 8px; cursor: pointer;
+      transition: background .12s;
+    }
+    .subject-item:hover { background: #f3f4f6; }
+    .subject-item.active { background: #eff6ff; }
+    .subject-avatar {
+      width: 38px; height: 38px; border-radius: 50%; object-fit: cover;
+      border: 2px solid #e5e7eb; flex-shrink: 0; background: #f3f4f6;
+    }
+    .subject-avatar.placeholder {
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px; background: #f3f4f6;
+    }
+    .subject-info { min-width: 0; }
+    .subject-name { font-weight: 700; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .subject-dob { font-size: 11px; color: #9ca3af; margin-top: 1px; }
+    .subject-cnt { font-size: 11px; color: #3b82f6; margin-top: 1px; }
+
+    .sidebar-ft { padding: 10px 8px; border-top: 1px solid #f3f4f6; flex-shrink: 0; }
+    .btn-new-subject {
+      width: 100%; padding: 8px 10px;
+      background: none; border: 1px dashed #d1d5db; border-radius: 8px;
+      color: #6b7280; font-size: 13px; cursor: pointer; text-align: center;
+    }
+    .btn-new-subject:hover { border-color: #3b82f6; color: #3b82f6; background: #eff6ff; }
+
+    /* ── new subject drawer (shown below button when active) ── */
+    .new-subject-form {
+      padding: 10px 8px; background: #f9fafb;
+      border-top: 1px solid #e5e7eb; display: none;
+    }
+    .new-subject-form.open { display: block; }
+    .nsf-field { margin-bottom: 8px; }
+    .nsf-field label {
+      display: block; font-size: 10px; font-weight: 700; color: #9ca3af;
+      text-transform: uppercase; letter-spacing: .05em; margin-bottom: 3px;
+    }
+    .nsf-field input[type="text"],
+    .nsf-field input[type="date"] {
+      width: 100%; padding: 6px 8px;
+      border: 1px solid #e5e7eb; border-radius: 6px; font-size: 12px; background: #fff;
+    }
+    .nsf-field input[type="file"] {
+      width: 100%; font-size: 11px; cursor: pointer;
+    }
+    .btn-create {
+      width: 100%; padding: 7px;
+      background: #3b82f6; color: #fff; border: none; border-radius: 6px;
+      font-size: 12px; font-weight: 700; cursor: pointer; margin-top: 4px;
+    }
+    .btn-create:disabled { opacity: .55; cursor: not-allowed; }
+    .btn-cancel-new { width: 100%; padding: 5px; background: none; border: none; color: #9ca3af; font-size: 11px; cursor: pointer; margin-top: 2px; }
+
+    /* ── main area ── */
+    .main { flex: 1; overflow-y: auto; padding: 20px 24px; display: flex; flex-direction: column; gap: 20px; }
+
+    /* empty state */
+    .empty-msg {
+      flex: 1; display: flex; flex-direction: column; align-items: center;
+      justify-content: center; color: #9ca3af; text-align: center; gap: 8px;
+      padding: 60px 0;
+    }
+    .empty-msg .icon { font-size: 52px; }
+    .empty-msg h2 { font-size: 16px; color: #6b7280; font-weight: 700; }
+    .empty-msg p { font-size: 13px; max-width: 280px; }
+
+    /* card */
+    .card {
+      background: #fff; border: 1px solid #e5e7eb; border-radius: 12px;
+      padding: 18px 20px;
+    }
+    .card-title {
+      font-size: 13px; font-weight: 700; color: #374151;
+      display: flex; align-items: center; gap: 8px; margin-bottom: 16px;
+    }
+    .card-title .num {
+      width: 22px; height: 22px; border-radius: 50%; background: #3b82f6; color: #fff;
+      font-size: 11px; font-weight: 800; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
     }
 
-    /* tabs */
-    .person-tabs {
-      display: flex; border: 1px solid var(--border, #e5e7eb);
-      border-radius: 8px; overflow: hidden; margin-bottom: 18px;
+    /* profile card */
+    .profile-card {
+      display: flex; align-items: center; gap: 16px;
     }
-    .person-tab {
-      flex: 1; padding: 10px 0; text-align: center;
-      font-size: 13px; font-weight: 600; cursor: pointer;
-      background: var(--bg, #fff); color: var(--text-2, #6b7280);
-      border: none; transition: background .15s, color .15s;
+    .profile-photo {
+      width: 72px; height: 72px; border-radius: 12px; object-fit: cover;
+      border: 2px solid #e5e7eb; flex-shrink: 0; background: #f3f4f6;
     }
-    .person-tab.active { background: var(--accent, #3b82f6); color: #fff; }
-
-    /* subject grid */
-    .subject-grid {
-      display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px;
-    }
-    .subject-chip {
-      padding: 10px 12px; border: 2px solid var(--border, #e5e7eb);
-      border-radius: 8px; cursor: pointer; background: var(--bg, #fff);
-      transition: border-color .15s; text-align: center;
-    }
-    .subject-chip:hover { border-color: var(--accent, #3b82f6); }
-    .subject-chip.selected { border-color: var(--accent); background: #eff6ff; color: var(--accent); }
-    .chip-name { font-size: 13px; font-weight: 700; }
-    .chip-count { font-size: 11px; color: var(--muted, #9ca3af); margin-top: 2px; }
-    .no-subjects { font-size: 13px; color: var(--muted, #9ca3af); padding: 8px 0; }
+    .profile-photo.placeholder { display: flex; align-items: center; justify-content: center; font-size: 32px; }
+    .profile-name { font-size: 20px; font-weight: 800; }
+    .profile-dob { font-size: 13px; color: #6b7280; margin-top: 3px; }
+    .profile-samples { font-size: 12px; color: #3b82f6; margin-top: 3px; }
 
     /* fields */
-    .field { margin-bottom: 14px; }
-    .field label {
-      display: block; font-size: 11px; font-weight: 700; color: var(--text-2);
-      text-transform: uppercase; letter-spacing: .05em; margin-bottom: 5px;
+    .fld { margin-bottom: 12px; }
+    .fld label {
+      display: block; font-size: 10px; font-weight: 700; color: #9ca3af;
+      text-transform: uppercase; letter-spacing: .05em; margin-bottom: 4px;
     }
-    .field input[type="text"],
-    .field input[type="date"],
-    .field input[type="number"],
-    .field select {
-      width: 100%; box-sizing: border-box; padding: 8px 10px;
-      border: 1px solid var(--border, #e5e7eb); border-radius: 6px;
-      font-size: 13px; background: var(--bg, #fff); color: var(--text, #111);
+    .fld input[type="date"],
+    .fld input[type="number"] {
+      padding: 7px 9px; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 13px;
     }
-    .field input[type="file"] {
-      width: 100%; box-sizing: border-box; padding: 6px 8px;
-      border: 1px solid var(--border, #e5e7eb); border-radius: 6px;
-      font-size: 13px; cursor: pointer;
+    .fld input[type="file"] {
+      width: 100%; padding: 6px 8px;
+      border: 1px solid #e5e7eb; border-radius: 6px; font-size: 12px; cursor: pointer;
     }
-    .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-    .divider { border: none; border-top: 1px solid var(--border, #e5e7eb); margin: 18px 0; }
 
     /* video list */
-    .video-list { display: flex; flex-direction: column; gap: 10px; }
-    .video-entry {
-      border: 1px solid var(--border, #e5e7eb); border-radius: 8px;
-      padding: 12px 14px; background: var(--bg-2, #f9fafb);
+    .video-list { display: flex; flex-direction: column; gap: 8px; }
+    .video-row {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 12px; border: 1px solid #e5e7eb; border-radius: 8px;
+      background: #f9fafb;
     }
-    .video-entry-head {
-      display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;
+    .video-row .vnum { font-size: 11px; font-weight: 700; color: #9ca3af; width: 50px; flex-shrink: 0; }
+    .video-row .vfile { flex: 2; }
+    .video-row .vfile input { width: 100%; font-size: 12px; cursor: pointer; }
+    .video-row .vdate { flex: 1; }
+    .video-row .vdate input {
+      width: 100%; padding: 5px 7px;
+      border: 1px solid #e5e7eb; border-radius: 5px; font-size: 12px;
     }
-    .video-entry-head span { font-size: 13px; font-weight: 700; color: var(--text-2); }
-    .remove-btn {
-      background: none; border: none; cursor: pointer; color: var(--muted); font-size: 17px; padding: 0 2px;
+    .video-row .vremove {
+      background: none; border: none; cursor: pointer; color: #d1d5db; font-size: 16px; padding: 0 2px;
     }
-    .remove-btn:hover { color: #ef4444; }
+    .video-row .vremove:hover { color: #ef4444; }
     .btn-add-video {
-      width: 100%; padding: 9px; background: none;
-      border: 1px dashed var(--border, #e5e7eb); border-radius: 6px;
-      color: var(--text-2); cursor: pointer; font-size: 13px; margin-top: 6px;
+      width: 100%; padding: 8px; background: none;
+      border: 1px dashed #d1d5db; border-radius: 6px;
+      color: #9ca3af; cursor: pointer; font-size: 12px; margin-top: 4px;
     }
-    .btn-add-video:hover { border-color: var(--accent); color: var(--accent); }
+    .btn-add-video:hover { border-color: #3b82f6; color: #3b82f6; }
 
     /* options */
-    .options-row { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; }
-    .options-row label { font-size: 13px; display: flex; align-items: center; gap: 6px; cursor: pointer; }
-    .th-pair { display: flex; gap: 12px; }
-    .th-field { display: flex; align-items: center; gap: 6px; }
-    .th-field label { font-size: 12px; color: var(--text-2); white-space: nowrap; }
-    .th-field input { width: 68px; padding: 5px 7px; border: 1px solid var(--border); border-radius: 5px; font-size: 12px; }
+    .opts { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; margin-top: 12px; }
+    .opts label { font-size: 12px; display: flex; align-items: center; gap: 5px; cursor: pointer; }
+    .thr-pair { display: flex; gap: 10px; margin-left: auto; }
+    .thr-f { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #6b7280; }
+    .thr-f input { width: 64px; padding: 4px 6px; border: 1px solid #e5e7eb; border-radius: 5px; font-size: 12px; }
 
     /* submit */
-    .btn-submit {
-      width: 100%; padding: 13px;
-      background: var(--accent, #3b82f6); color: #fff;
-      border: none; border-radius: 8px; font-size: 15px; font-weight: 700;
-      cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px;
-      margin-top: 20px; transition: opacity .15s;
+    .btn-run {
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+      width: 100%; padding: 12px; margin-top: 14px;
+      background: #3b82f6; color: #fff; border: none; border-radius: 8px;
+      font-size: 14px; font-weight: 700; cursor: pointer; transition: opacity .15s;
     }
-    .btn-submit:disabled { opacity: .55; cursor: not-allowed; }
-    .btn-submit:not(:disabled):hover { opacity: .9; }
+    .btn-run:disabled { opacity: .55; cursor: not-allowed; }
+    .btn-run:not(:disabled):hover { opacity: .9; }
 
     /* progress panel */
-    #progressPanel {
-      border: 1px solid var(--border, #e5e7eb); border-radius: 10px;
-      overflow: hidden; display: none;
+    .progress-panel {
+      border: 1px solid #e5e7eb; border-radius: 10px; overflow: hidden; display: none;
     }
-    .progress-header {
-      background: var(--bg-2, #f9fafb); padding: 10px 14px;
-      font-size: 12px; font-weight: 700; color: var(--text-2);
+    .progress-hd {
+      background: #f9fafb; padding: 9px 14px;
+      font-size: 11px; font-weight: 700; color: #6b7280;
       display: flex; align-items: center; justify-content: space-between;
     }
-    .progress-body { max-height: 280px; overflow-y: auto; padding: 0; }
-    .progress-phase {
+    .progress-body { max-height: 260px; overflow-y: auto; }
+    .p-phase {
       display: flex; align-items: center; gap: 8px;
-      padding: 10px 14px; background: #eff6ff;
-      border-top: 1px solid var(--border);
-      font-size: 13px; font-weight: 700; color: #1d4ed8;
+      padding: 9px 14px; background: #eff6ff; border-top: 1px solid #e5e7eb;
+      font-size: 12px; font-weight: 700; color: #1d4ed8;
     }
-    .progress-step {
-      display: flex; align-items: flex-start; gap: 8px;
-      padding: 6px 14px 6px 36px; border-top: 1px solid #f0f0f0;
-      font-size: 12px; color: var(--text-2);
-      line-height: 1.5;
+    .p-step {
+      display: flex; align-items: flex-start; gap: 6px;
+      padding: 5px 14px 5px 34px; border-top: 1px solid #f5f5f5;
+      font-size: 11px; color: #6b7280; line-height: 1.55;
     }
-    .progress-model {
+    .p-model {
       display: flex; align-items: center; gap: 10px;
-      padding: 6px 14px 6px 36px; border-top: 1px solid #f0f0f0;
-      font-size: 12px;
+      padding: 5px 14px 5px 34px; border-top: 1px solid #f5f5f5; font-size: 11px;
     }
-    .model-label { width: 110px; flex-shrink: 0; color: var(--text); font-weight: 600; }
-    .model-bar-wrap { flex: 1; height: 6px; background: #e5e7eb; border-radius: 3px; overflow: hidden; }
-    .model-bar { height: 100%; background: var(--accent, #3b82f6); border-radius: 3px; transition: width .25s; }
-    .model-count { font-size: 11px; color: var(--muted); min-width: 50px; text-align: right; }
-    .model-tick { color: #16a34a; font-size: 13px; }
+    .pm-label { width: 120px; flex-shrink: 0; color: #374151; font-weight: 600; }
+    .pm-bar-wrap { flex: 1; height: 5px; background: #e5e7eb; border-radius: 3px; overflow: hidden; }
+    .pm-bar { height: 100%; background: #3b82f6; border-radius: 3px; transition: width .25s; }
+    .pm-cnt { font-size: 10px; color: #9ca3af; min-width: 46px; text-align: right; }
+    .pm-tick { color: #16a34a; font-size: 12px; }
 
-    /* status bar */
-    .status-bar { padding: 11px 14px; border-radius: 8px; font-size: 13px; display: none; }
-    .status-bar.info    { background: #eff6ff; color: #1d4ed8; display: block; }
-    .status-bar.error   { background: #fef2f2; color: #dc2626; display: block; }
-    .status-bar.success { background: #f0fdf4; color: #16a34a; display: block; }
+    /* status */
+    .status {
+      padding: 10px 14px; border-radius: 8px; font-size: 13px; display: none; align-items: center; gap: 8px;
+    }
+    .status.show { display: flex; }
+    .status.info    { background: #eff6ff; color: #1d4ed8; }
+    .status.error   { background: #fef2f2; color: #dc2626; }
+    .status.success { background: #f0fdf4; color: #16a34a; }
 
-    /* results */
-    .chart-wrapper { position: relative; height: 320px; }
-    .point-list { margin-top: 16px; display: flex; flex-direction: column; gap: 10px; }
-    .point-card {
-      border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; background: var(--bg);
+    /* chart */
+    .chart-wrap { position: relative; height: 300px; }
+    .point-list { margin-top: 14px; display: flex; flex-direction: column; gap: 8px; }
+    .pt-card { border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px 14px; }
+    .pt-meta { font-size: 11px; font-weight: 700; color: #9ca3af; margin-bottom: 5px; }
+    .pt-est { font-size: 22px; font-weight: 800; color: #3b82f6; }
+    .pt-range { font-size: 11px; color: #9ca3af; margin-left: 6px; }
+    .pt-summary { font-size: 12px; color: #374151; margin-top: 6px; line-height: 1.65; }
+    .factor-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+    .ftag {
+      padding: 2px 7px; background: #f3f4f6; border: 1px solid #e5e7eb;
+      border-radius: 10px; font-size: 10px; color: #6b7280;
     }
-    .pt-meta { font-size: 12px; font-weight: 700; color: var(--text-2); margin-bottom: 6px; }
-    .pt-estimate { font-size: 24px; font-weight: 800; color: var(--accent); }
-    .pt-range { font-size: 12px; color: var(--muted); margin-left: 8px; }
-    .pt-summary { font-size: 13px; color: var(--text); margin-top: 8px; line-height: 1.65; }
-    .factor-tags { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
-    .factor-tag {
-      padding: 2px 8px; background: var(--bg-2); border: 1px solid var(--border);
-      border-radius: 12px; font-size: 11px; color: var(--text-2);
-    }
-    .empty-state { text-align: center; padding: 48px 0; color: var(--muted); }
-    .empty-state .es-icon { font-size: 52px; }
-    .empty-state .es-title { font-size: 16px; font-weight: 700; color: var(--text-2); margin-top: 12px; }
-    .empty-state .es-hint { font-size: 13px; margin-top: 6px; }
-    .selected-badge {
-      display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px;
-      background: #eff6ff; color: var(--accent); border: 1px solid var(--accent);
-      border-radius: 12px; font-size: 12px; font-weight: 700; margin-top: 10px;
+
+    /* chart empty */
+    .chart-empty {
+      height: 300px; display: flex; align-items: center; justify-content: center;
+      color: #9ca3af; font-size: 13px; border: 1px dashed #e5e7eb; border-radius: 8px;
     }
 
     /* spinner */
-    .spinner {
-      display: inline-block; width: 14px; height: 14px;
+    .spin {
+      display: inline-block; width: 13px; height: 13px;
       border: 2px solid currentColor; border-top-color: transparent;
-      border-radius: 50%; animation: spin .7s linear infinite; vertical-align: middle;
+      border-radius: 50%; animation: rot .7s linear infinite; vertical-align: middle;
     }
-    @keyframes spin { to { transform: rotate(360deg); } }
+    @keyframes rot { to { transform: rotate(360deg); } }
   </style>
 </head>
 <body>
 
-<header class="app-header">
-  <span class="logo">🩺</span>
-  <div style="flex:1">
-    <h1>Life Monitoring</h1>
-    <p>多模态健康分析系统 · 集成面部、声学多维度小模型</p>
+<!-- ── Header ─────────────────────────────────────────────────────────── -->
+<div class="hdr">
+  <span class="hdr-logo">🩺</span>
+  <span class="hdr-title">Life Monitoring</span>
+  <span class="hdr-sub">寿命曲线 Demo</span>
+  <div class="hdr-links">
+    <a href="/" target="_blank">综合分析</a>
+    <a href="/preprocessing" target="_blank">数据预处理</a>
+    <a href="/age-timeline" target="_blank">年龄时间线</a>
   </div>
-  <nav class="header-nav">
-    <a href="/" class="nav-link">综合分析</a>
-    <a href="/preprocessing" class="nav-link">数据预处理</a>
-    <a href="/age-timeline" class="nav-link">年龄时间线</a>
-    <a href="/lifetime-curve" class="nav-link active">寿命曲线</a>
-  </nav>
-</header>
+</div>
 
-<div class="page-wrap">
+<div class="layout">
 
-  <!-- ═══ PART 1 — 上传材料 ═══════════════════════════════════════ -->
-  <div class="card">
-    <div class="section-title">
-      <span class="section-num">1</span>
-      上传材料
+  <!-- ── Sidebar ───────────────────────────────────────────────────────── -->
+  <div class="sidebar">
+    <div class="sidebar-hd">人物档案</div>
+    <div class="subject-list" id="subjectList">
+      <div style="padding:12px 8px;font-size:12px;color:#9ca3af">加载中…</div>
     </div>
 
-    <div class="person-tabs">
-      <button class="person-tab active" id="tabExisting" onclick="switchTab('existing')">选择已有人物</button>
-      <button class="person-tab"        id="tabNew"      onclick="switchTab('new')">新建人物</button>
-    </div>
-
-    <!-- existing panel -->
-    <div id="panelExisting">
-      <div id="subjectGrid" class="subject-grid">
-        <div class="no-subjects">正在加载…</div>
-      </div>
-      <div id="selectedBadge" style="display:none" class="selected-badge">
-        <span>✓</span><span id="selectedName"></span>
-      </div>
-      <div style="margin-top:16px">
-        <div style="font-size:11px;font-weight:700;color:var(--text-2);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">
-          锚点文件（每次上传视频均需提供，用于身份确认）
+    <div class="sidebar-ft">
+      <button class="btn-new-subject" id="btnNewSubject" onclick="toggleNewForm()">＋ 新建人物</button>
+      <!-- New-subject inline form -->
+      <div class="new-subject-form" id="newSubjectForm">
+        <div class="nsf-field">
+          <label>姓名 / ID</label>
+          <input type="text" id="nsfName" placeholder="张三" />
         </div>
-        <div class="field-row">
-          <div class="field" style="margin-bottom:0">
-            <label>出生日期</label>
-            <input type="date" id="existingBirthDate" />
+        <div class="nsf-field">
+          <label>出生日期</label>
+          <input type="date" id="nsfDob" />
+        </div>
+        <div class="nsf-field">
+          <label>锚点照片（留存用）</label>
+          <input type="file" id="nsfFace" accept="image/*" />
+        </div>
+        <div class="nsf-field">
+          <label>锚点声音（留存用）</label>
+          <input type="file" id="nsfVoice" accept="audio/*,video/*" />
+        </div>
+        <button class="btn-create" id="btnCreate" onclick="createSubject()">创建档案</button>
+        <button class="btn-cancel-new" onclick="toggleNewForm()">取消</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Main content ──────────────────────────────────────────────────── -->
+  <div class="main" id="mainArea">
+
+    <!-- empty state -->
+    <div class="empty-msg" id="emptyMsg">
+      <div class="icon">🧬</div>
+      <h2>选择左侧人物，或新建档案</h2>
+      <p>每次上传视频后会在曲线上新增一个时间点，历史点刷新后依然保留。<br>
+         没有配置 LLM 也能运行，直接用 facettd 模型的估计值。</p>
+    </div>
+
+    <!-- content shown when a subject is selected -->
+    <div id="subjectContent" style="display:none">
+
+      <!-- ① Profile card -->
+      <div class="card">
+        <div class="card-title"><span class="num">①</span> 人物档案</div>
+        <div class="profile-card">
+          <img id="profilePhoto" class="profile-photo" src="" alt="anchor face"
+               onerror="this.style.display='none';document.getElementById('profilePhotoPlaceholder').style.display='flex'" />
+          <div id="profilePhotoPlaceholder" class="profile-photo placeholder" style="display:none">🧑</div>
+          <div>
+            <div class="profile-name" id="profileName">—</div>
+            <div class="profile-dob" id="profileDob"></div>
+            <div class="profile-samples" id="profileSamples"></div>
           </div>
-          <div style="display:contents"><!-- spacer --></div>
-          <div class="field" style="margin-bottom:0">
-            <label>锚点照片</label>
-            <input type="file" id="existingFace" accept="image/*" />
+        </div>
+      </div>
+
+      <!-- ② Upload video(s) -->
+      <div class="card">
+        <div class="card-title"><span class="num">②</span> 上传视频</div>
+
+        <div class="video-list" id="videoList"></div>
+        <button class="btn-add-video" onclick="addVideoRow()">＋ 添加视频</button>
+
+        <div class="opts">
+          <label>
+            <input type="checkbox" id="includeSkin" />
+            含皮肤病检测（较慢）
+          </label>
+          <div class="thr-pair">
+            <div class="thr-f">
+              <span>人脸阈值</span>
+              <input type="number" id="faceThreshold" value="0.70" min="0" max="1" step="0.05" />
+            </div>
+            <div class="thr-f">
+              <span>声纹阈值</span>
+              <input type="number" id="voiceThreshold" value="0.75" min="0" max="1" step="0.05" />
+            </div>
           </div>
-          <div class="field" style="margin-bottom:0">
-            <label>锚点声音</label>
-            <input type="file" id="existingVoice" accept="audio/*,video/*" />
-          </div>
+        </div>
+
+        <button class="btn-run" id="runBtn" onclick="runAnalysis()">
+          <span id="runIcon">▶</span>
+          <span id="runText">开始分析</span>
+        </button>
+      </div>
+
+      <!-- Progress panel -->
+      <div class="progress-panel" id="progressPanel">
+        <div class="progress-hd">
+          <span>📊 处理进展</span>
+          <span id="progressSummary" style="font-weight:400;color:#9ca3af"></span>
+        </div>
+        <div class="progress-body" id="progressBody"></div>
+      </div>
+
+      <!-- Status bar -->
+      <div class="status" id="statusBar"></div>
+
+      <!-- ③ Lifetime curve -->
+      <div class="card">
+        <div class="card-title">
+          <span class="num">③</span> 剩余寿命预测曲线
+          <span id="resultLabel" style="font-size:12px;font-weight:600;color:#3b82f6;margin-left:auto"></span>
+        </div>
+        <div class="chart-empty" id="chartEmpty">暂无数据 — 完成分析后曲线将显示在此处</div>
+        <div id="chartArea" style="display:none">
+          <div class="chart-wrap"><canvas id="lifetimeChart"></canvas></div>
+          <div class="point-list" id="pointList"></div>
         </div>
       </div>
-    </div>
 
-    <!-- new panel -->
-    <div id="panelNew" style="display:none">
-      <div class="field">
-        <label>姓名 / ID</label>
-        <input type="text" id="newName" placeholder="例：张三（用作目录名）" />
-      </div>
-      <div class="field">
-        <label>出生日期</label>
-        <input type="date" id="newBirthDate" />
-        <div style="font-size:11px;color:var(--muted);margin-top:3px">填写后系统自动计算每次拍摄时的年龄</div>
-      </div>
-      <div class="field-row">
-        <div class="field" style="margin-bottom:0">
-          <label>锚点照片</label>
-          <input type="file" id="newFace" accept="image/*" />
-        </div>
-        <div class="field" style="margin-bottom:0">
-          <label>锚点声音</label>
-          <input type="file" id="newVoice" accept="audio/*,video/*" />
-        </div>
-      </div>
-    </div>
-
-    <hr class="divider" />
-
-    <div style="font-size:13px;font-weight:700;color:var(--text-2);margin-bottom:12px">
-      📹 视频样本（每条填写拍摄日期即可，年龄自动计算）
-    </div>
-    <div class="video-list" id="videoList"></div>
-    <button class="btn-add-video" id="addVideoBtn">＋ 添加视频</button>
-
-    <hr class="divider" />
-
-    <div class="options-row">
-      <label>
-        <input type="checkbox" id="includeSkin" />
-        含皮肤病检测（较慢）
-      </label>
-      <div class="th-pair">
-        <div class="th-field">
-          <label>人脸阈值</label>
-          <input type="number" id="faceThreshold" value="0.70" min="0" max="1" step="0.05" />
-        </div>
-        <div class="th-field">
-          <label>声纹阈值</label>
-          <input type="number" id="voiceThreshold" value="0.75" min="0" max="1" step="0.05" />
-        </div>
-      </div>
-    </div>
-
-    <button class="btn-submit" id="runBtn" onclick="runAnalysis()">
-      <span id="runIcon">▶</span>
-      <span id="runText">开始分析</span>
-    </button>
-  </div>
-
-  <!-- ═══ 进展面板 ═══════════════════════════════════════════════ -->
-  <div id="progressPanel">
-    <div class="progress-header">
-      <span>📊 处理进展</span>
-      <span id="progressSummary" style="font-weight:400;color:var(--muted)"></span>
-    </div>
-    <div class="progress-body" id="progressBody"></div>
-  </div>
-
-  <!-- status bar -->
-  <div class="status-bar" id="statusBar"></div>
-
-  <!-- ═══ PART 2 — 剩余寿命预测曲线 ═══════════════════════════════ -->
-  <div class="card">
-    <div class="section-title">
-      <span class="section-num">2</span>
-      剩余寿命预测曲线
-      <span id="resultLabel" style="font-size:13px;font-weight:600;color:var(--accent);margin-left:auto"></span>
-    </div>
-
-    <div class="empty-state" id="emptyState">
-      <div class="es-icon">📉</div>
-      <div class="es-title">选择人物后曲线将展示在此处</div>
-      <div class="es-hint">
-        没有配置 LLM 也会有结果，直接使用 facettd 模型的估计值。<br>
-        每次「开始分析」会自动合并到历史曲线，刷新页面不丢失。
-      </div>
-    </div>
-
-    <div id="chartArea" style="display:none">
-      <div class="chart-wrapper">
-        <canvas id="lifetimeChart"></canvas>
-      </div>
-      <div class="point-list" id="pointList"></div>
-    </div>
-  </div>
-
-</div><!-- /page-wrap -->
+    </div><!-- /subjectContent -->
+  </div><!-- /main -->
+</div><!-- /layout -->
 
 <script>
 // ─── state ────────────────────────────────────────────────────────────────
-let activeTab = 'existing';
-let selectedSubject = null;
-let videoCount = 0;
+let subjects = [];          // [{subject_name, birth_date, sample_count, ...}]
+let currentSubject = null;  // selected subject object
+let videoRowCount = 0;
 let chart = null;
-
-// per-model progress tracking
 const modelState = {};
 
 // ─── boot ─────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
   loadSubjects();
-  addVideoEntry();
-  document.getElementById('addVideoBtn').addEventListener('click', addVideoEntry);
+  addVideoRow();
 });
-
-// ─── tabs ──────────────────────────────────────────────────────────────────
-function switchTab(tab) {
-  activeTab = tab;
-  document.getElementById('tabExisting').classList.toggle('active', tab === 'existing');
-  document.getElementById('tabNew').classList.toggle('active', tab === 'new');
-  document.getElementById('panelExisting').style.display = tab === 'existing' ? '' : 'none';
-  document.getElementById('panelNew').style.display      = tab === 'new'      ? '' : 'none';
-  selectedSubject = null;
-  document.getElementById('selectedBadge').style.display = 'none';
-  clearResults();
-}
 
 // ─── subjects ─────────────────────────────────────────────────────────────
 async function loadSubjects() {
   try {
-    const resp = await fetch('/api/workflow/subjects');
-    const data = await resp.json();
-    renderSubjectGrid(data.subjects || []);
-  } catch (_) { renderSubjectGrid([]); }
+    const r = await fetch('/api/workflow/subjects');
+    const data = await r.json();
+    subjects = data.subjects || [];
+    renderSidebar();
+  } catch (_) {
+    document.getElementById('subjectList').innerHTML =
+      '<div style="padding:8px;font-size:12px;color:#ef4444">加载失败</div>';
+  }
 }
 
-function renderSubjectGrid(subjects) {
-  const grid = document.getElementById('subjectGrid');
+function renderSidebar() {
+  const list = document.getElementById('subjectList');
   if (!subjects.length) {
-    grid.innerHTML = '<div class="no-subjects">暂无已有人物，请切换到「新建人物」。</div>';
+    list.innerHTML = '<div style="padding:12px 8px;font-size:12px;color:#9ca3af">暂无档案，点击下方新建</div>';
     return;
   }
-  grid.innerHTML = subjects.map(s => `
-    <div class="subject-chip" id="chip_${esc(s.subject_name)}"
-         onclick="selectSubject(${JSON.stringify(s.subject_name)}, ${s.sample_count})">
-      <div class="chip-name">${esc(s.subject_name)}</div>
-      <div class="chip-count">${s.sample_count} 次采样</div>
+  list.innerHTML = subjects.map(s => `
+    <div class="subject-item ${currentSubject?.subject_name === s.subject_name ? 'active' : ''}"
+         id="si_${esc(s.subject_name)}"
+         onclick="selectSubject(${JSON.stringify(s.subject_name)})">
+      <img class="subject-avatar" src="/api/workflow/subjects/${encodeURIComponent(s.subject_name)}/anchor-face"
+           onerror="this.outerHTML='<div class=\\'subject-avatar placeholder\\'>🧑</div>'" />
+      <div class="subject-info">
+        <div class="subject-name">${esc(s.subject_name)}</div>
+        <div class="subject-dob">${s.birth_date ? 'DOB ' + s.birth_date : '无出生日期'}</div>
+        <div class="subject-cnt">${s.sample_count} 次采样</div>
+      </div>
     </div>
   `).join('');
 }
 
-async function selectSubject(name, sampleCount) {
-  selectedSubject = name;
-  document.querySelectorAll('.subject-chip').forEach(el => el.classList.remove('selected'));
-  const chip = document.getElementById(`chip_${esc(name)}`);
-  if (chip) chip.classList.add('selected');
-  document.getElementById('selectedName').textContent = name;
-  document.getElementById('selectedBadge').style.display = '';
+async function selectSubject(name) {
+  const s = subjects.find(x => x.subject_name === name);
+  if (!s) return;
+  currentSubject = s;
+  renderSidebar();
+  showSubjectContent(s);
 
-  if (sampleCount > 0) {
-    try {
-      showStatus('info', '<span class="spinner"></span> 正在加载历史曲线…');
-      const resp = await fetch(`/api/workflow/timeline/${encodeURIComponent(name)}`);
-      if (resp.ok) {
-        const data = await resp.json();
-        renderResults(data);
-        showStatus('success', `✓ 已加载 ${data.points.length} 个历史时间点`);
-      } else { hideStatus(); }
-    } catch (_) { hideStatus(); }
-  } else { clearResults(); }
+  // Load persisted timeline if available
+  try {
+    const r = await fetch(`/api/workflow/timeline/${encodeURIComponent(name)}`);
+    if (r.ok) {
+      const data = await r.json();
+      if (data.points?.length) renderChart(data.points);
+    }
+  } catch (_) {}
 }
 
-// ─── video entries ─────────────────────────────────────────────────────────
-function addVideoEntry() {
-  videoCount++;
-  const id = videoCount;
-  const div = document.createElement('div');
-  div.className = 'video-entry';
-  div.dataset.id = id;
-  div.innerHTML = `
-    <div class="video-entry-head">
-      <span>视频 #${id}</span>
-      <button class="remove-btn" onclick="removeVideo(${id})" title="移除">✕</button>
-    </div>
-    <div class="field" style="margin-bottom:10px">
-      <label>视频文件</label>
-      <input type="file" id="vf_${id}" accept="video/*" />
-    </div>
-    <div class="field" style="margin-bottom:0">
-      <label>拍摄日期</label>
-      <input type="date" id="vd_${id}" value="${todayStr()}" />
-    </div>
+function showSubjectContent(s) {
+  document.getElementById('emptyMsg').style.display = 'none';
+  document.getElementById('subjectContent').style.display = '';
+  document.getElementById('profileName').textContent = s.subject_name;
+  document.getElementById('profileDob').textContent = s.birth_date
+    ? '出生：' + s.birth_date : '未记录出生日期';
+  document.getElementById('profileSamples').textContent = `已采样 ${s.sample_count} 次`;
+
+  const photo = document.getElementById('profilePhoto');
+  const placeholder = document.getElementById('profilePhotoPlaceholder');
+  photo.src = `/api/workflow/subjects/${encodeURIComponent(s.subject_name)}/anchor-face?t=${Date.now()}`;
+  photo.style.display = '';
+  placeholder.style.display = 'none';
+
+  document.getElementById('resultLabel').textContent = s.subject_name;
+
+  // Reset chart to empty state if no samples yet
+  if (s.sample_count === 0) {
+    document.getElementById('chartEmpty').style.display = '';
+    document.getElementById('chartArea').style.display = 'none';
+  }
+}
+
+// ─── new subject form ──────────────────────────────────────────────────────
+let newFormOpen = false;
+function toggleNewForm() {
+  newFormOpen = !newFormOpen;
+  document.getElementById('newSubjectForm').classList.toggle('open', newFormOpen);
+}
+
+async function createSubject() {
+  const name  = document.getElementById('nsfName').value.trim();
+  const dob   = document.getElementById('nsfDob').value;
+  const face  = document.getElementById('nsfFace').files[0];
+  const voice = document.getElementById('nsfVoice').files[0];
+
+  if (!name)  return alert('请填写姓名 / ID');
+  if (!dob)   return alert('请填写出生日期');
+  if (!face)  return alert('请上传锚点照片');
+  if (!voice) return alert('请上传锚点声音');
+
+  const btn = document.getElementById('btnCreate');
+  btn.disabled = true;
+  btn.textContent = '创建中…';
+
+  const fd = new FormData();
+  fd.append('subject_name', name);
+  fd.append('birth_date', dob);
+  fd.append('anchor_face', face);
+  fd.append('anchor_voice', voice);
+
+  try {
+    const r = await fetch('/api/workflow/subjects', { method: 'POST', body: fd });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.detail || `HTTP ${r.status}`);
+
+    // Reset form
+    document.getElementById('nsfName').value = '';
+    document.getElementById('nsfDob').value = '';
+    document.getElementById('nsfFace').value = '';
+    document.getElementById('nsfVoice').value = '';
+    toggleNewForm();
+
+    // Refresh list and select new subject
+    await loadSubjects();
+    selectSubject(name);
+  } catch (e) {
+    alert('创建失败：' + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '创建档案';
+  }
+}
+
+// ─── video rows ────────────────────────────────────────────────────────────
+function addVideoRow() {
+  videoRowCount++;
+  const id = videoRowCount;
+  const row = document.createElement('div');
+  row.className = 'video-row';
+  row.dataset.id = id;
+  row.innerHTML = `
+    <span class="vnum">视频 #${id}</span>
+    <div class="vfile"><input type="file" id="vf_${id}" accept="video/*" /></div>
+    <div class="vdate"><input type="date" id="vd_${id}" value="${todayStr()}" /></div>
+    <button class="vremove" onclick="removeVideoRow(${id})" title="移除">✕</button>
   `;
-  document.getElementById('videoList').appendChild(div);
+  document.getElementById('videoList').appendChild(row);
 }
 
-function removeVideo(id) {
-  const el = document.querySelector(`.video-entry[data-id="${id}"]`);
-  if (el) el.remove();
+function removeVideoRow(id) {
+  document.querySelector(`.video-row[data-id="${id}"]`)?.remove();
 }
 
 function todayStr() { return new Date().toISOString().slice(0, 10); }
 
 function collectVideos() {
-  return [...document.querySelectorAll('.video-entry')].map(el => {
+  return [...document.querySelectorAll('.video-row')].map(el => {
     const id = el.dataset.id;
     return {
       file: document.getElementById(`vf_${id}`)?.files[0],
@@ -460,77 +570,48 @@ function collectVideos() {
   }).filter(v => v.file);
 }
 
-// ─── validation ───────────────────────────────────────────────────────────
+// ─── analysis ─────────────────────────────────────────────────────────────
 function validate() {
-  if (activeTab === 'existing') {
-    if (!selectedSubject) return '请选择一个已有人物，或切换到「新建人物」';
-    if (!document.getElementById('existingBirthDate').value) return '请填写出生日期';
-    if (!document.getElementById('existingFace').files.length)  return '请上传锚点照片';
-    if (!document.getElementById('existingVoice').files.length) return '请上传锚点声音';
-  } else {
-    if (!document.getElementById('newName').value.trim()) return '请填写姓名 / ID';
-    if (!document.getElementById('newBirthDate').value)   return '请填写出生日期';
-    if (!document.getElementById('newFace').files.length)  return '请上传锚点照片';
-    if (!document.getElementById('newVoice').files.length) return '请上传锚点声音';
-  }
+  if (!currentSubject) return '请先在左侧选择人物';
+  if (!currentSubject.birth_date) return '该人物档案缺少出生日期';
   const videos = collectVideos();
   if (!videos.length) return '请至少添加一条视频文件';
-  for (const v of videos) {
-    if (!v.date) return '视频缺少拍摄日期';
-  }
+  for (const v of videos) if (!v.date) return '视频缺少拍摄日期';
   return null;
 }
 
-// ─── run analysis (SSE streaming) ─────────────────────────────────────────
 async function runAnalysis() {
   const err = validate();
   if (err) { showStatus('error', err); return; }
 
   setRunning(true);
-  showProgress(true);
-  clearProgressBody();
-  showStatus('info', '<span class="spinner"></span> 连接服务器…');
+  clearProgressPanel();
+  showProgressPanel(true);
+  showStatus('info', '<span class="spin"></span> 连接服务器…');
 
   const fd = new FormData();
-  let birthDate;
-
-  if (activeTab === 'existing') {
-    fd.append('subject_name', selectedSubject);
-    birthDate = document.getElementById('existingBirthDate').value;
-    fd.append('anchor_face',  document.getElementById('existingFace').files[0]);
-    fd.append('anchor_voice', document.getElementById('existingVoice').files[0]);
-  } else {
-    fd.append('subject_name', document.getElementById('newName').value.trim());
-    birthDate = document.getElementById('newBirthDate').value;
-    fd.append('anchor_face',  document.getElementById('newFace').files[0]);
-    fd.append('anchor_voice', document.getElementById('newVoice').files[0]);
-  }
-  fd.append('birth_date', birthDate);
+  fd.append('subject_name', currentSubject.subject_name);
+  fd.append('birth_date', currentSubject.birth_date);
   fd.append('include_skin_disease', document.getElementById('includeSkin').checked);
   fd.append('face_threshold', document.getElementById('faceThreshold').value);
   fd.append('voice_threshold', document.getElementById('voiceThreshold').value);
 
-  const videos = collectVideos();
-  for (const v of videos) {
+  for (const v of collectVideos()) {
     fd.append('videos', v.file);
     fd.append('dates', v.date);
   }
 
   try {
-    const response = await fetch('/api/workflow/analyze-stream', {
-      method: 'POST',
-      body: fd,
-    });
+    const response = await fetch('/api/workflow/analyze-stream', { method: 'POST', body: fd });
     if (!response.ok) {
-      const data = await response.json().catch(() => ({}));
-      throw new Error(data.detail || `HTTP ${response.status}`);
+      const d = await response.json().catch(() => ({}));
+      throw new Error(d.detail || `HTTP ${response.status}`);
     }
-
-    showStatus('info', '<span class="spinner"></span> 处理中，请耐心等待…');
+    showStatus('info', '<span class="spin"></span> 处理中，请耐心等待…');
     await consumeSSE(response.body);
-
   } catch (e) {
-    showStatus('error', `❌ ${e.message}`);
+    showStatus('error', '❌ ' + e.message);
+  } finally {
     setRunning(false);
   }
 }
@@ -538,193 +619,145 @@ async function runAnalysis() {
 async function consumeSSE(body) {
   const reader = body.getReader();
   const decoder = new TextDecoder();
-  let buffer = '';
-
+  let buf = '';
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-
-    // SSE chunks are separated by double newlines
-    const chunks = buffer.split('\n\n');
-    buffer = chunks.pop(); // keep incomplete last chunk
-
+    buf += decoder.decode(value, { stream: true });
+    const chunks = buf.split('\n\n');
+    buf = chunks.pop();
     for (const chunk of chunks) {
-      const eventMatch = chunk.match(/^event:\s*(.+)$/m);
-      const dataMatch  = chunk.match(/^data:\s*(.+)$/ms);
-      if (!dataMatch) continue;
-      const eventType = eventMatch ? eventMatch[1].trim() : 'message';
-      let data;
-      try { data = JSON.parse(dataMatch[1].trim()); } catch (_) { continue; }
-      handleSSEEvent(eventType, data);
+      const em = chunk.match(/^event:\s*(.+)$/m);
+      const dm = chunk.match(/^data:\s*(.+)$/ms);
+      if (!dm) continue;
+      const type = em ? em[1].trim() : 'message';
+      let data; try { data = JSON.parse(dm[1].trim()); } catch (_) { continue; }
+      handleEvent(type, data);
     }
   }
-
   setRunning(false);
 }
 
-function handleSSEEvent(type, data) {
-  switch (type) {
-    case 'phase':
-      addPhaseRow(data.desc || data.phase);
-      document.getElementById('progressSummary').textContent = data.desc || '';
-      break;
-    case 'step':
-      addStepRow(data.desc || data.step);
-      break;
-    case 'model_progress':
-      updateModelBar(data);
-      break;
-    case 'done':
-      renderResults(data);
-      showStatus('success', `✓ 分析完成，共 ${(data.points || []).length} 个时间点`);
-      loadSubjects();
-      break;
-    case 'error':
-      showStatus('error', `❌ ${data.detail || '未知错误'}`);
-      break;
+function handleEvent(type, data) {
+  if (type === 'phase') {
+    addPhaseRow(data.desc || data.phase);
+    document.getElementById('progressSummary').textContent = data.desc || '';
+  } else if (type === 'step') {
+    addStepRow(data.desc || data.step);
+  } else if (type === 'model_progress') {
+    updateModelBar(data);
+  } else if (type === 'done') {
+    renderChart(data.points || []);
+    showStatus('success', `✓ 分析完成，共 ${(data.points || []).length} 个时间点`);
+    // Update sample count in sidebar
+    const s = subjects.find(x => x.subject_name === data.subject_name);
+    if (s) s.sample_count = (data.points || []).length;
+    renderSidebar();
+    if (currentSubject) currentSubject.sample_count = (data.points || []).length;
+    document.getElementById('profileSamples').textContent = `已采样 ${currentSubject?.sample_count} 次`;
+  } else if (type === 'error') {
+    showStatus('error', '❌ ' + (data.detail || '未知错误'));
   }
 }
 
-// ─── progress panel rendering ──────────────────────────────────────────────
-function showProgress(on) {
+// ─── progress panel ────────────────────────────────────────────────────────
+function showProgressPanel(on) {
   document.getElementById('progressPanel').style.display = on ? '' : 'none';
 }
-
-function clearProgressBody() {
+function clearProgressPanel() {
   document.getElementById('progressBody').innerHTML = '';
   Object.keys(modelState).forEach(k => delete modelState[k]);
 }
-
 function addPhaseRow(text) {
-  const div = document.createElement('div');
-  div.className = 'progress-phase';
-  div.innerHTML = `<span class="spinner" style="flex-shrink:0"></span><span>${esc(text)}</span>`;
-  document.getElementById('progressBody').appendChild(div);
-  scrollProgressToBottom();
+  const d = document.createElement('div');
+  d.className = 'p-phase';
+  d.innerHTML = `<span class="spin" style="flex-shrink:0"></span><span>${esc(text)}</span>`;
+  document.getElementById('progressBody').appendChild(d);
+  scrollPB();
 }
-
 function addStepRow(text) {
-  const div = document.createElement('div');
-  div.className = 'progress-step';
-  div.innerHTML = `<span style="color:#9ca3af;margin-top:2px">›</span><span>${esc(text)}</span>`;
-  document.getElementById('progressBody').appendChild(div);
-  scrollProgressToBottom();
+  const d = document.createElement('div');
+  d.className = 'p-step';
+  d.innerHTML = `<span style="color:#d1d5db;margin-top:1px">›</span><span>${esc(text)}</span>`;
+  document.getElementById('progressBody').appendChild(d);
+  scrollPB();
 }
-
 function updateModelBar(data) {
   const model = data.model;
-  const current = data.current || 0;
-  const total = data.total || 1;
-  const done = data.done || false;
-  const pct = total > 0 ? Math.round(current / total * 100) : 100;
-
+  const cur = data.current || 0, tot = data.total || 1;
+  const pct = tot > 0 ? Math.round(cur / tot * 100) : 100;
   if (!modelState[model]) {
-    // Create bar row
-    const row = document.createElement('div');
-    row.className = 'progress-model';
-    row.id = `model_row_${model}`;
     const labels = {
-      faceage: 'FaceAge（生物年龄）',
-      facettd: 'facettd（寿命预测）',
-      parkinsons: 'Parkinsons（帕金森）',
-      lung_cancer: 'LungCancer（肺癌）',
-      skin_disease: 'SkinDisease（皮肤）',
+      faceage: 'FaceAge（生物年龄）', facettd: 'facettd（寿命预测）',
+      parkinsons: 'Parkinsons', lung_cancer: 'LungCancer', skin_disease: 'SkinDisease',
     };
+    const row = document.createElement('div');
+    row.className = 'p-model'; row.id = `pmr_${model}`;
     row.innerHTML = `
-      <span class="model-label">${labels[model] || model}</span>
-      <div class="model-bar-wrap"><div class="model-bar" id="bar_${model}" style="width:0%"></div></div>
-      <span class="model-count" id="cnt_${model}"></span>
-      <span id="tick_${model}"></span>
+      <span class="pm-label">${labels[model] || model}</span>
+      <div class="pm-bar-wrap"><div class="pm-bar" id="pmb_${model}" style="width:0%"></div></div>
+      <span class="pm-cnt" id="pmc_${model}"></span>
+      <span id="pmt_${model}"></span>
     `;
     document.getElementById('progressBody').appendChild(row);
     modelState[model] = true;
-    scrollProgressToBottom();
+    scrollPB();
   }
-
-  const bar = document.getElementById(`bar_${model}`);
-  const cnt = document.getElementById(`cnt_${model}`);
-  const tick = document.getElementById(`tick_${model}`);
+  const bar = document.getElementById(`pmb_${model}`);
+  const cnt = document.getElementById(`pmc_${model}`);
+  const tick = document.getElementById(`pmt_${model}`);
   if (bar) bar.style.width = pct + '%';
-  if (cnt) {
-    if (total > 1) {
-      cnt.textContent = `${current}/${total}`;
-    } else if (data.value !== undefined) {
-      cnt.textContent = data.value;
-    }
-  }
-  if (done && tick) {
-    tick.className = 'model-tick';
-    tick.textContent = '✓';
+  if (cnt) cnt.textContent = tot > 1 ? `${cur}/${tot}` : (data.value ?? '');
+  if (data.done && tick) {
+    tick.className = 'pm-tick'; tick.textContent = '✓';
     if (bar) bar.style.background = '#16a34a';
   }
 }
-
-function scrollProgressToBottom() {
-  const body = document.getElementById('progressBody');
-  body.scrollTop = body.scrollHeight;
+function scrollPB() {
+  const b = document.getElementById('progressBody');
+  b.scrollTop = b.scrollHeight;
 }
 
-// ─── results ──────────────────────────────────────────────────────────────
-function renderResults(data) {
-  document.getElementById('emptyState').style.display = 'none';
-  document.getElementById('chartArea').style.display  = '';
-  document.getElementById('resultLabel').textContent  = data.subject_name || '';
-  renderChart(data.points || []);
-  const list = document.getElementById('pointList');
-  list.innerHTML = '';
-  for (const pt of (data.points || [])) list.appendChild(buildPointCard(pt));
-}
-
+// ─── chart ─────────────────────────────────────────────────────────────────
 function renderChart(points) {
-  if (chart) { chart.destroy(); chart = null; }
-  const labels    = points.map(p => p.captured_at.slice(0, 10));
-  const estimates = points.map(p => p.remaining_life_estimate >= 0 ? p.remaining_life_estimate : null);
-  const lows      = points.map(p => p.uncertainty_low);
-  const highs     = points.map(p => p.uncertainty_high);
+  document.getElementById('chartEmpty').style.display = 'none';
+  document.getElementById('chartArea').style.display = '';
 
-  const ctx = document.getElementById('lifetimeChart').getContext('2d');
-  chart = new Chart(ctx, {
+  if (chart) { chart.destroy(); chart = null; }
+  const labels = points.map(p => p.captured_at.slice(0, 10));
+  const ests   = points.map(p => p.remaining_life_estimate >= 0 ? p.remaining_life_estimate : null);
+  const lows   = points.map(p => p.uncertainty_low);
+  const highs  = points.map(p => p.uncertainty_high);
+
+  chart = new Chart(document.getElementById('lifetimeChart').getContext('2d'), {
     type: 'line',
     data: {
       labels,
       datasets: [
-        {
-          label: '剩余寿命估计（年）',
-          data: estimates,
-          borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,0.08)',
+        { label: '剩余寿命估计（年）', data: ests,
+          borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,0.07)',
           pointRadius: 5, pointBackgroundColor: '#3b82f6',
-          tension: 0.35, fill: false, order: 1,
-        },
-        {
-          label: '不确定性上界',
-          data: highs,
-          borderColor: 'rgba(156,163,175,0.45)', backgroundColor: 'rgba(156,163,175,0.1)',
-          pointRadius: 0, borderDash: [5, 4], fill: '+1', tension: 0.35, order: 2,
-        },
-        {
-          label: '不确定性下界',
-          data: lows,
-          borderColor: 'rgba(156,163,175,0.45)', backgroundColor: 'rgba(156,163,175,0.1)',
-          pointRadius: 0, borderDash: [5, 4], fill: false, tension: 0.35, order: 3,
-        },
+          tension: 0.35, fill: false, order: 1 },
+        { label: '上界', data: highs,
+          borderColor: 'rgba(156,163,175,.4)', backgroundColor: 'rgba(156,163,175,.07)',
+          pointRadius: 0, borderDash: [5,4], fill: '+1', tension: 0.35, order: 2 },
+        { label: '下界', data: lows,
+          borderColor: 'rgba(156,163,175,.4)', backgroundColor: 'rgba(156,163,175,.07)',
+          pointRadius: 0, borderDash: [5,4], fill: false, tension: 0.35, order: 3 },
       ],
     },
     options: {
       responsive: true, maintainAspectRatio: false,
       plugins: {
-        legend: { labels: { boxWidth: 12, font: { size: 12 } } },
-        tooltip: {
-          callbacks: {
-            label: ctx => {
-              const pt = points[ctx.dataIndex];
-              if (!pt) return '';
-              const est = pt.remaining_life_estimate >= 0
-                ? pt.remaining_life_estimate.toFixed(1) : '—';
-              return `估计 ${est} 年  [${pt.uncertainty_low.toFixed(1)} – ${pt.uncertainty_high.toFixed(1)}]`;
-            },
-          },
-        },
+        legend: { labels: { boxWidth: 11, font: { size: 11 } } },
+        tooltip: { callbacks: {
+          label: ctx => {
+            const pt = points[ctx.dataIndex];
+            if (!pt) return '';
+            const e = pt.remaining_life_estimate >= 0 ? pt.remaining_life_estimate.toFixed(1) : '—';
+            return `估计 ${e} 年  [${pt.uncertainty_low.toFixed(1)} – ${pt.uncertainty_high.toFixed(1)}]`;
+          }
+        }},
       },
       scales: {
         x: { title: { display: true, text: '拍摄日期' } },
@@ -732,53 +765,37 @@ function renderChart(points) {
       },
     },
   });
+
+  const list = document.getElementById('pointList');
+  list.innerHTML = '';
+  for (const pt of points) {
+    const e = pt.remaining_life_estimate >= 0 ? pt.remaining_life_estimate.toFixed(1) : '—';
+    const tags = (pt.key_factors || []).map(f => `<span class="ftag">${esc(f)}</span>`).join('');
+    const card = document.createElement('div');
+    card.className = 'pt-card';
+    card.innerHTML = `
+      <div class="pt-meta">${pt.captured_at.slice(0,10)}（时年 ${pt.age_at_capture} 岁）</div>
+      <div><span class="pt-est">${e} 年</span>
+           <span class="pt-range">[${pt.uncertainty_low.toFixed(1)} – ${pt.uncertainty_high.toFixed(1)}]</span></div>
+      ${pt.summary ? `<div class="pt-summary">${esc(pt.summary)}</div>` : ''}
+      ${tags ? `<div class="factor-tags">${tags}</div>` : ''}
+    `;
+    list.appendChild(card);
+  }
 }
 
-function buildPointCard(pt) {
-  const card = document.createElement('div');
-  card.className = 'point-card';
-  const est  = pt.remaining_life_estimate >= 0 ? pt.remaining_life_estimate.toFixed(1) : '—';
-  const tags = (pt.key_factors || []).map(f => `<span class="factor-tag">${esc(f)}</span>`).join('');
-  card.innerHTML = `
-    <div class="pt-meta">${pt.captured_at.slice(0,10)}（时年 ${pt.age_at_capture} 岁）</div>
-    <div>
-      <span class="pt-estimate">${est} 年</span>
-      <span class="pt-range">[${pt.uncertainty_low.toFixed(1)} – ${pt.uncertainty_high.toFixed(1)}]</span>
-    </div>
-    ${pt.summary ? `<div class="pt-summary">${esc(pt.summary)}</div>` : ''}
-    ${tags ? `<div class="factor-tags">${tags}</div>` : ''}
-  `;
-  return card;
-}
-
-// ─── UI helpers ───────────────────────────────────────────────────────────
+// ─── helpers ───────────────────────────────────────────────────────────────
 function setRunning(on) {
   const btn = document.getElementById('runBtn');
   btn.disabled = on;
-  document.getElementById('runIcon').innerHTML = on ? '<span class="spinner"></span>' : '▶';
+  document.getElementById('runIcon').innerHTML = on ? '<span class="spin"></span>' : '▶';
   document.getElementById('runText').textContent = on ? '分析中…' : '开始分析';
 }
-
 function showStatus(type, msg) {
   const bar = document.getElementById('statusBar');
-  bar.className = `status-bar ${type}`;
+  bar.className = 'status show ' + type;
   bar.innerHTML = msg;
 }
-
-function hideStatus() {
-  const bar = document.getElementById('statusBar');
-  bar.className = 'status-bar';
-  bar.innerHTML = '';
-}
-
-function clearResults() {
-  document.getElementById('emptyState').style.display = '';
-  document.getElementById('chartArea').style.display  = 'none';
-  document.getElementById('pointList').innerHTML = '';
-  document.getElementById('resultLabel').textContent = '';
-  if (chart) { chart.destroy(); chart = null; }
-}
-
 function esc(s) {
   return String(s).replace(/[&<>"']/g, c =>
     ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])
