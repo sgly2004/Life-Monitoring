@@ -1,115 +1,124 @@
-template: '你是一名经验丰富的医学专家，请基于以下多模态健康分析结果，对患者进行综合评估并判断预期生存期。
+template: |
+  你是一名经验丰富的老年医学专家。
+  请根据以下多模态健康检测数据，估算该人物当前的预期剩余寿命，并输出一个 JSON 对象。
 
+  ## 对象信息
 
-  ## 患者基本信息
-
+  {% if subject_name is defined and subject_name %}
+  - 姓名：{{ subject_name }}
+  {% endif %}
+  {% if captured_at is defined and captured_at %}
+  - 采样日期：{{ captured_at }}
+  {% endif %}
+  {% if age_at_capture is defined %}
+  - 拍摄时实际年龄：{{ age_at_capture }} 岁
+  {% elif age is defined %}
   - 实际年龄：{{ age }} 岁
+  {% endif %}
 
-  {% if faceage is defined and faceage.ok %}
+  {% if faceage_bio_age is defined or (faceage is defined and faceage.ok) %}
+  ## 面部生物年龄（FaceAge）
 
+  年龄差作为定性指标，可以作为剩余寿命的判定依据。健康人群的年龄差在 0.35 岁左右，癌症、吸烟等人群年龄差会显著上升。
 
-  ## 面部生物年龄评估（FaceAge）
-
-  年龄差作为定性指标，可以作为剩余寿命的判定依据。健康人群的年龄差在 0.35 岁左右，癌症、吸烟等等人群，年龄差会显著上升。
-
+  {% if faceage_bio_age is defined %}
+  - 生物年龄（中位数）：{{ "%.1f"|format(faceage_bio_age) }} 岁
+  {% if faceage_delta is defined %}
+  - 与实际年龄差：{{ "%+.1f"|format(faceage_delta) }} 岁（正值=看起来偏老）
+  {% endif %}
+  {% else %}
   - {{ faceage.summary }}
-
-  - 生物年龄：**{{ faceage.outputs.biological_age }} 岁**
-
+  - 生物年龄：{{ faceage.outputs.biological_age }} 岁
   - 与实际年龄差：{{ faceage.outputs.biological_age - age }} 岁（正值表示生物年龄偏大）
+  {% endif %}
 
   {% endif %}
 
-  {% if facettd is defined and facettd.ok %}
-
-
+  {% if facettd_remaining is defined or (facettd is defined and facettd.ok) %}
   ## 面部死亡时间预测（FaceTTD）
 
+  {% if facettd_remaining is defined %}
+  - 剩余寿命估计（中位数）：{{ "%.1f"|format(facettd_remaining) }} 年
+  {% else %}
   - {{ facettd.summary }}
-
-  - 预测剩余寿命：**{{ facettd.outputs.time_to_death_years }} 年**
-
-  - 预期寿命：**{{ facettd.outputs.life_expectancy_age }} 岁**
+  - 预测剩余寿命：{{ facettd.outputs.time_to_death_years }} 年
+  - 预期寿命：{{ facettd.outputs.life_expectancy_age }} 岁
+  {% endif %}
 
   {% endif %}
 
-  {% if parkinsons is defined and parkinsons.ok %}
-
-
+  {% if parkinsons_prob is defined or (parkinsons is defined and parkinsons.ok) %}
   ## 帕金森病声学检测（Parkinsons）
 
+  {% if parkinsons_prob is defined %}
+  - 风险标签：{{ parkinsons_label }}
+  {% if parkinsons_prob is not none %}
+  - 平均概率：{{ "%.1f"|format(parkinsons_prob * 100) }}%
+  {% endif %}
+  {% else %}
   - {{ parkinsons.summary }}
-
-  - 诊断结果：**{{ parkinsons.outputs.diagnosis }}**
-
+  - 诊断结果：{{ parkinsons.outputs.diagnosis }}
   - 帕金森概率：{{ "%.1f"|format(parkinsons.outputs.prob_parkinson * 100) }}%
-
-  - 风险等级：**{{ parkinsons.outputs.risk_level }}**
+  - 风险等级：{{ parkinsons.outputs.risk_level }}
+  {% endif %}
 
   {% endif %}
 
-  {% if lung_cancer is defined and lung_cancer.ok %}
+  {% if lung_cancer_prob is defined or (lung_cancer is defined and lung_cancer.ok) %}
+  ## 早期肺癌语音检测（LungCancer）
 
-
-  ## 早期肺癌语音检测（Lung Cancer）
-
+  {% if lung_cancer_prob is defined %}
+  - 风险标签：{{ lung_cancer_label }}
+  {% if lung_cancer_prob is not none %}
+  - 平均概率：{{ "%.1f"|format(lung_cancer_prob * 100) }}%
+  {% endif %}
+  {% else %}
   - {{ lung_cancer.summary }}
-
-  - 最终判断：**{{ lung_cancer.outputs.final_verdict }}**
-
+  - 最终判断：{{ lung_cancer.outputs.final_verdict }}
   - 模型投票：{{ lung_cancer.outputs.votes_positive }}/{{ lung_cancer.outputs.total_models }} 个模型阳性
+  {% endif %}
 
   {% endif %}
 
-  {% if skin_disease is defined and skin_disease.ok %}
-
-
+  {% if skin_disease_label is defined or (skin_disease is defined and skin_disease.ok) %}
   ## 皮肤病检测（SkinDisease）
 
+  {% if skin_disease_label is defined %}
+  - 风险标签：{{ skin_disease_label }}
+  {% if skin_disease_prob is defined and skin_disease_prob is not none %}
+  - 概率：{{ "%.1f"|format(skin_disease_prob * 100) }}%
+  {% endif %}
+  {% else %}
   - {{ skin_disease.summary }}
-
-  - 诊断结果：**{{ skin_disease.outputs.diagnosis }}**
-
+  - 诊断结果：{{ skin_disease.outputs.diagnosis }}
   - 置信度：{{ "%.1f"|format(skin_disease.outputs.confidence * 100) }}%
-
-  - 严重程度：**{{ skin_disease.outputs.severity }}**
-
-  - 建议：{{ skin_disease.outputs.urgency }}
+  - 严重程度：{{ skin_disease.outputs.severity }}
+  {% endif %}
 
   {% endif %}
 
   {% if mental_health is defined and mental_health.ok %}
-
-
   ## 心理状态检测（MentalHealth）
 
   - {{ mental_health.summary }}
-
-  - 主导情绪：**{{ mental_health.outputs.dominant_emotion }}**（置信度 {{ "%.1f"|format(mental_health.outputs.dominant_probability * 100) }}%）
-
-  - 心理健康评分：**{{ mental_health.outputs.mental_health_score }}/100**（{{ mental_health.outputs.mental_health_risk }}）
-
-  - 情绪状态：**{{ mental_health.outputs.mental_state }}**
+  - 主导情绪：{{ mental_health.outputs.dominant_emotion }}（置信度 {{ "%.1f"|format(mental_health.outputs.dominant_probability * 100) }}%）
+  - 心理健康评分：{{ mental_health.outputs.mental_health_score }}/100（{{ mental_health.outputs.mental_health_risk }}）
+  - 情绪状态：{{ mental_health.outputs.mental_state }}
 
   {% endif %}
 
+  ## 输出要求
 
-  ## 分析任务
+  请仅输出以下 JSON 对象，不要包含任何 Markdown 代码块标记或额外文字：
+  {
+    "remaining_life_years": <估计剩余寿命（年，浮点数）>,
+    "uncertainty_low": <95%置信区间下界（年）>,
+    "uncertainty_high": <95%置信区间上界（年）>,
+    "key_factors": ["主要影响因素1", "主要影响因素2"],
+    "summary": "一段简短的综合评估说明（2-3句话）"
+  }
 
-
-  请综合以上所有模态的检测结果，考虑：
-
-  1. 各项指标的异常程度和风险等级
-
-  2. 多项检测结果的综合关联与相互印证
-
-  3. 该患者可能的疾病进展方向与速度
-
-  4. 心理健康状态对整体健康评估的影响
-
-
-  请给出：
-
-  - **预期生存期判断**（给出合理范围，说明置信度）
-
-  - **关键风险因素排序**'
+  注意：
+  - 若某项检测数据缺失，在评估中忽略该项，不要虚构数据。
+  - 置信区间宽度应反映数据质量和不确定性。
+  - 剩余寿命估计不代表任何临床结论，仅供研究参考。

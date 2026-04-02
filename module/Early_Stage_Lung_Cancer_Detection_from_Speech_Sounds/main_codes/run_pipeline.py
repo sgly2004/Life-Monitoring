@@ -40,8 +40,8 @@ os.makedirs(MODEL_DIR, exist_ok=True)
 log(f"数据集路径: {DATASET_PATH}")
 log(f"模型保存目录: {MODEL_DIR}")
 log(f"待检测音频:   {WAV_PATH}")
-device = torch.device("mps" if torch.backends.mps.is_available() else
-                      "cuda" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda" if torch.cuda.is_available() else
+                      "mps" if torch.backends.mps.is_available() else "cpu")
 log(f"使用设备: {device}")
 
 # ══════════════════════════════════════════════════════════════════════════════

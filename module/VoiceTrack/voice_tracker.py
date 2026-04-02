@@ -29,9 +29,11 @@ def _cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
 
 
 def _get_device() -> str:
-    """Return 'mps' on Apple Silicon, else 'cpu'."""
+    """Return best available device: cuda > mps (Apple Silicon) > cpu."""
     try:
         import torch
+        if torch.cuda.is_available():
+            return "cuda"
         if torch.backends.mps.is_available():
             return "mps"
     except Exception:

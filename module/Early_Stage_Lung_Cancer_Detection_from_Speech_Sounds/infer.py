@@ -20,8 +20,8 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 MODEL_DIR = os.path.join(SCRIPT_DIR, "saved_models")
 
 DEVICE = torch.device(
-    "mps" if torch.backends.mps.is_available()
-    else "cuda" if torch.cuda.is_available()
+    "cuda" if torch.cuda.is_available()
+    else "mps" if torch.backends.mps.is_available()
     else "cpu"
 )
 

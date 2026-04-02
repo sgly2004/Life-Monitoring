@@ -5,6 +5,7 @@ Endpoints:
   GET  /                        Serve index.html (综合分析)
   GET  /preprocessing           Serve preprocessing.html (数据预处理)
   GET  /age-timeline            Serve age_timeline.html
+  GET  /lifetime-curve          Serve lifetime_curve.html (寿命曲线 Demo)
   GET  /api/modules             List all module metadata
   POST /api/analyze             Run analysis (multipart form)
   POST /api/faceage-batch       Batch FaceAge prediction (multiple images)
@@ -14,6 +15,7 @@ Endpoints:
   POST /api/split/voice         VoiceTrack — split audio by reference voice
   POST /api/face-split          FaceTrack (frontend-facing, field: reference_image)
   POST /api/voice-split         VoiceTrack (frontend-facing, field: reference_audio)
+  POST /api/workflow/analyze    Full lifetime-curve pipeline (anchor + dated videos)
 
 Start:
   uvicorn web.app:app --reload --port 8000
@@ -64,6 +66,11 @@ async def preprocessing():
 @app.get("/age-timeline", include_in_schema=False)
 async def age_timeline():
     return FileResponse(str(STATIC_DIR / "age_timeline.html"))
+
+
+@app.get("/lifetime-curve", include_in_schema=False)
+async def lifetime_curve():
+    return FileResponse(str(STATIC_DIR / "lifetime_curve.html"))
 
 
 @app.get("/api/modules")
@@ -417,6 +424,154 @@ async def split_by_voice(
         raise HTTPException(status_code=500, detail=str(exc))
     finally:
         shutil.rmtree(session_dir, ignore_errors=True)
+
+
+# ── Workflow: full lifetime-curve pipeline ────────────────────────────────────
+
+@app.post("/api/workflow/analyze")
+async def workflow_analyze(
+    subject_name: str = Form(...),
+    anchor_face: UploadFile = File(...),
+    anchor_voice: UploadFile = File(...),
+    # Repeated fields for each video: videos[], dates[], ages[]
+    videos: List[UploadFile] = File(...),
+    dates: List[str] = Form(...),    # ISO date strings, one per video
+    ages: List[int] = Form(...),     # age_at_capture, one per video
+    include_skin_disease: bool = Form(False),
+    face_threshold: float = Form(0.70),
+    voice_threshold: float = Form(0.75),
+):
+    """
+    Full lifetime-curve pipeline.
+
+    Form fields:
+      subject_name         str   — unique name / ID for the person
+      anchor_face          file  — reference face image (JPG/PNG)
+      anchor_voice         file  — reference voice clip (WAV/MP3/M4A)
+      videos               files — one or more dated video files
+      dates                strs  — ISO date string per video (e.g. "2024-03-15")
+      ages                 ints  — age_at_capture per video
+      include_skin_disease bool  — whether to run SkinDisease module (default False)
+      face_threshold       float — FaceTrack similarity threshold (default 0.70)
+      voice_threshold      float — VoiceTrack similarity threshold (default 0.75)
+
+    Returns LifetimeTimeline as JSON.
+    """
+    from datetime import datetime as _dt
+
+    if len(videos) != len(dates) or len(videos) != len(ages):
+        raise HTTPException(
+            status_code=422,
+            detail="videos, dates, and ages must have the same number of items",
+        )
+
+    session_id = str(uuid.uuid4())[:8]
+    session_dir = UPLOADS_DIR / f"__session_{session_id}"
+    session_dir.mkdir(parents=True, exist_ok=True)
+
+    try:
+        # Save anchor files
+        face_ext = Path(anchor_face.filename).suffix.lower() if anchor_face.filename else ".jpg"
+        face_path = session_dir / f"anchor_face{face_ext}"
+        with open(face_path, "wb") as f:
+            shutil.copyfileobj(anchor_face.file, f)
+
+        voice_ext = Path(anchor_voice.filename).suffix.lower() if anchor_voice.filename else ".wav"
+        voice_path = session_dir / f"anchor_voice{voice_ext}"
+        with open(voice_path, "wb") as f:
+            shutil.copyfileobj(anchor_voice.file, f)
+
+        from core.workflow_types import AnchorInput, VideoSample
+        from core.preprocess_pipeline import preprocess_sample
+        from core.result_aggregator import aggregate_sample
+        from core.timeline_builder import build_timeline
+
+        anchor = AnchorInput(
+            subject_name=subject_name,
+            anchor_face_path=str(face_path),
+            anchor_voice_path=str(voice_path),
+        )
+
+        # Save video files and build VideoSample list
+        video_samples: List[VideoSample] = []
+        for i, (video_upload, date_str, age) in enumerate(zip(videos, dates, ages)):
+            vid_ext = Path(video_upload.filename).suffix.lower() if video_upload.filename else ".mp4"
+            vid_path = session_dir / f"video_{i:02d}{vid_ext}"
+            with open(vid_path, "wb") as f:
+                shutil.copyfileobj(video_upload.file, f)
+
+            try:
+                captured_at = _dt.fromisoformat(date_str)
+            except ValueError:
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"Invalid date format for video {i}: '{date_str}'. Use ISO format (YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS).",
+                )
+
+            video_samples.append(VideoSample(
+                video_path=str(vid_path),
+                captured_at=captured_at,
+                age_at_capture=int(age),
+            ))
+
+        # Run pipeline for each video (sequential to avoid OOM on large models)
+        analyses = []
+        for vs in video_samples:
+            try:
+                preprocessed = preprocess_sample(
+                    anchor=anchor,
+                    sample=vs,
+                    uploads_root=UPLOADS_DIR,
+                    face_threshold=face_threshold,
+                    voice_threshold=voice_threshold,
+                )
+                analysis = aggregate_sample(
+                    preprocessed,
+                    include_skin_disease=include_skin_disease,
+                )
+                analyses.append(analysis)
+            except Exception as exc:
+                import logging as _logging
+                _logging.getLogger(__name__).warning(
+                    "Pipeline failed for video %s: %s", vs.video_path, exc
+                )
+
+        if not analyses:
+            raise HTTPException(
+                status_code=500,
+                detail="所有视频处理均失败，无法生成时间轴",
+            )
+
+        timeline = build_timeline(subject_name=subject_name, analyses=analyses)
+
+        # Serialize timeline (exclude raw_analysis for size)
+        timeline_dict = {
+            "subject_name": timeline.subject_name,
+            "points": [
+                {
+                    "captured_at": p.captured_at.isoformat(),
+                    "age_at_capture": p.age_at_capture,
+                    "remaining_life_estimate": p.remaining_life_estimate,
+                    "uncertainty_low": p.uncertainty_low,
+                    "uncertainty_high": p.uncertainty_high,
+                    "key_factors": p.key_factors,
+                    "summary": p.summary,
+                }
+                for p in timeline.sorted_points()
+            ],
+        }
+        return JSONResponse(content=timeline_dict)
+
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+    finally:
+        # Clean up temporary session files (not the persisted subject uploads)
+        try:
+            shutil.rmtree(session_dir, ignore_errors=True)
+        except Exception:
+            pass
 
 
 if __name__ == "__main__":

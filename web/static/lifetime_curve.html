@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>寿命曲线 Demo — Life Monitoring</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+  <style>
+    /* ── Layout ── */
+    .lc-layout {
+      display: grid;
+      grid-template-columns: 360px 1fr;
+      gap: 24px;
+      padding: 24px;
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+    @media (max-width: 900px) {
+      .lc-layout { grid-template-columns: 1fr; }
+    }
+
+    /* ── Form panel ── */
+    .form-section { margin-bottom: 20px; }
+    .form-section label {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-2, #6b7280);
+      text-transform: uppercase;
+      letter-spacing: .04em;
+      margin-bottom: 6px;
+    }
+    .form-section input[type="text"],
+    .form-section input[type="number"],
+    .form-section input[type="date"],
+    .form-section input[type="file"] {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 8px 10px;
+      border: 1px solid var(--border, #e5e7eb);
+      border-radius: 6px;
+      font-size: 13px;
+      background: var(--bg, #fff);
+      color: var(--text, #111);
+    }
+    .form-section input[type="file"] { padding: 6px 8px; cursor: pointer; }
+
+    /* ── Video entries ── */
+    .video-list { display: flex; flex-direction: column; gap: 12px; }
+    .video-entry {
+      border: 1px solid var(--border, #e5e7eb);
+      border-radius: 8px;
+      padding: 12px;
+      background: var(--bg-2, #f9fafb);
+      position: relative;
+    }
+    .video-entry-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .remove-btn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: var(--muted, #9ca3af);
+      font-size: 16px;
+      padding: 0 4px;
+    }
+    .remove-btn:hover { color: #ef4444; }
+    .video-entry-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .video-entry-fields label {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-2, #6b7280);
+      display: block;
+      margin-bottom: 3px;
+    }
+    .video-entry-fields input { font-size: 12px; }
+    .video-file-row { margin-bottom: 8px; }
+
+    /* ── Buttons ── */
+    .btn-add {
+      width: 100%;
+      padding: 8px;
+      background: none;
+      border: 1px dashed var(--border, #e5e7eb);
+      border-radius: 6px;
+      color: var(--text-2, #6b7280);
+      cursor: pointer;
+      font-size: 13px;
+      margin-top: 4px;
+    }
+    .btn-add:hover { background: var(--bg-2, #f9fafb); color: var(--accent, #3b82f6); }
+
+    /* ── Chart area ── */
+    .chart-wrapper-lc { position: relative; height: 340px; }
+    .timeline-point-list { margin-top: 16px; display: flex; flex-direction: column; gap: 12px; }
+    .timeline-point-card {
+      border: 1px solid var(--border, #e5e7eb);
+      border-radius: 8px;
+      padding: 14px 16px;
+    }
+    .timeline-point-card .pt-date {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--text-2, #6b7280);
+      margin-bottom: 6px;
+    }
+    .timeline-point-card .pt-estimate {
+      font-size: 22px;
+      font-weight: 800;
+      color: var(--accent, #3b82f6);
+    }
+    .timeline-point-card .pt-range {
+      font-size: 12px;
+      color: var(--muted, #9ca3af);
+      margin-left: 6px;
+    }
+    .timeline-point-card .pt-summary {
+      font-size: 13px;
+      color: var(--text, #111);
+      margin-top: 8px;
+      line-height: 1.6;
+    }
+    .timeline-point-card .pt-factors {
+      display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px;
+    }
+    .factor-tag {
+      padding: 2px 8px;
+      background: var(--bg-2, #f9fafb);
+      border: 1px solid var(--border, #e5e7eb);
+      border-radius: 12px;
+      font-size: 11px;
+      color: var(--text-2, #6b7280);
+    }
+
+    /* ── Status ── */
+    .status-bar {
+      padding: 10px 14px;
+      border-radius: 8px;
+      font-size: 13px;
+      margin-bottom: 16px;
+      display: none;
+    }
+    .status-bar.info { background: #eff6ff; color: #1d4ed8; display: block; }
+    .status-bar.error { background: #fef2f2; color: #dc2626; display: block; }
+    .status-bar.success { background: #f0fdf4; color: #16a34a; display: block; }
+
+    /* ── Loading spinner ── */
+    .spinner {
+      display: inline-block;
+      width: 14px; height: 14px;
+      border: 2px solid currentColor;
+      border-top-color: transparent;
+      border-radius: 50%;
+      animation: spin .7s linear infinite;
+      vertical-align: middle;
+      margin-right: 6px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Empty state ── */
+    .lc-empty {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 60px 0;
+      color: var(--muted, #9ca3af);
+      text-align: center;
+    }
+    .lc-empty .icon { font-size: 56px; }
+    .lc-empty .title { font-size: 18px; font-weight: 700; margin-top: 12px; color: var(--text-2, #6b7280); }
+    .lc-empty .hint { font-size: 13px; margin-top: 6px; }
+  </style>
+</head>
+<body>
+
+<header class="app-header">
+  <span class="logo">🩺</span>
+  <div style="flex:1">
+    <h1>Life Monitoring</h1>
+    <p>多模态健康分析系统 · 集成面部、声学多维度小模型</p>
+  </div>
+  <nav class="header-nav">
+    <a href="/" class="nav-link">综合分析</a>
+    <a href="/preprocessing" class="nav-link">数据预处理</a>
+    <a href="/age-timeline" class="nav-link">年龄时间线</a>
+    <a href="/lifetime-curve" class="nav-link active">寿命曲线</a>
+  </nav>
+</header>
+
+<div class="lc-layout">
+
+  <!-- ── Left: Input panel ──────────────────────────── -->
+  <div class="lc-left">
+
+    <!-- Subject identity -->
+    <div class="card">
+      <div class="card-title"><span class="icon">👤</span>目标人物</div>
+
+      <div class="form-section">
+        <label>姓名 / ID</label>
+        <input type="text" id="subjectName" placeholder="例：张三（作为存储目录名）" />
+      </div>
+
+      <div class="form-section">
+        <label>锚点照片（用于人脸识别）</label>
+        <input type="file" id="anchorFace" accept="image/*" />
+      </div>
+
+      <div class="form-section">
+        <label>锚点声音（用于声纹识别）</label>
+        <input type="file" id="anchorVoice" accept="audio/*,video/*" />
+      </div>
+    </div>
+
+    <!-- Video samples -->
+    <div class="card">
+      <div class="card-title"><span class="icon">🎬</span>视频样本</div>
+      <p style="font-size:12px;color:var(--text-2);margin-bottom:12px">
+        每条视频需标注拍摄日期和拍摄时的年龄，用于生成时间轴。
+      </p>
+
+      <div class="video-list" id="videoList"></div>
+      <button class="btn-add" id="addVideoBtn">＋ 添加视频</button>
+    </div>
+
+    <!-- Options -->
+    <div class="card">
+      <div class="card-title"><span class="icon">⚙️</span>选项</div>
+      <div style="display:flex;gap:16px;flex-wrap:wrap">
+        <label style="font-size:13px;display:flex;align-items:center;gap:6px;cursor:pointer">
+          <input type="checkbox" id="includeSkinDisease" />
+          包含皮肤病检测（较慢）
+        </label>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px">
+        <div>
+          <label style="font-size:11px;font-weight:600;color:var(--text-2);display:block;margin-bottom:3px">人脸相似度阈值</label>
+          <input type="number" id="faceThreshold" value="0.70" min="0" max="1" step="0.05" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px" />
+        </div>
+        <div>
+          <label style="font-size:11px;font-weight:600;color:var(--text-2);display:block;margin-bottom:3px">声纹相似度阈值</label>
+          <input type="number" id="voiceThreshold" value="0.75" min="0" max="1" step="0.05" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px" />
+        </div>
+      </div>
+    </div>
+
+    <button class="btn-run" id="runBtn" style="width:100%">
+      <span id="runBtnIcon">▶</span>
+      <span id="runBtnText">开始分析</span>
+    </button>
+
+  </div>
+
+  <!-- ── Right: Results panel ────────────────────────── -->
+  <div class="lc-right">
+
+    <div id="statusBar" class="status-bar"></div>
+
+    <!-- Empty state -->
+    <div class="lc-empty" id="emptyState">
+      <div class="icon">📈</div>
+      <div class="title">填写左侧信息后点击「开始分析」</div>
+      <div class="hint">系统将提取人脸、声纹并运行多模态健康模型，生成剩余寿命时间轴</div>
+    </div>
+
+    <!-- Chart -->
+    <div class="card" id="chartCard" style="display:none">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+        <div class="card-title" style="margin-bottom:0">
+          <span class="icon">📉</span>剩余寿命估计曲线
+        </div>
+        <span id="subjectLabel" style="font-size:13px;font-weight:600;color:var(--accent)"></span>
+      </div>
+      <div class="chart-wrapper-lc">
+        <canvas id="lifetimeChart"></canvas>
+      </div>
+    </div>
+
+    <!-- Per-sample cards -->
+    <div id="pointList" class="timeline-point-list"></div>
+
+  </div>
+</div>
+
+<script>
+// ── State ──────────────────────────────────────────────────────────────────
+let videoCount = 0;
+let chart = null;
+
+// ── Add default first video entry on load ──────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  addVideoEntry();
+});
+
+// ── Video entry management ─────────────────────────────────────────────────
+document.getElementById('addVideoBtn').addEventListener('click', addVideoEntry);
+
+function addVideoEntry() {
+  videoCount++;
+  const id = videoCount;
+  const list = document.getElementById('videoList');
+
+  const entry = document.createElement('div');
+  entry.className = 'video-entry';
+  entry.dataset.id = id;
+  entry.innerHTML = `
+    <div class="video-entry-header">
+      <span>视频 #${id}</span>
+      <button class="remove-btn" onclick="removeVideoEntry(${id})" title="移除">✕</button>
+    </div>
+    <div class="video-file-row">
+      <label style="font-size:11px;font-weight:600;color:var(--text-2);display:block;margin-bottom:3px">视频文件</label>
+      <input type="file" id="videoFile_${id}" accept="video/*" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px" />
+    </div>
+    <div class="video-entry-fields">
+      <div>
+        <label>拍摄日期</label>
+        <input type="date" id="videoDate_${id}" value="${todayStr()}" />
+      </div>
+      <div>
+        <label>拍摄时年龄（岁）</label>
+        <input type="number" id="videoAge_${id}" placeholder="例：70" min="0" max="130" />
+      </div>
+    </div>
+  `;
+  list.appendChild(entry);
+}
+
+function removeVideoEntry(id) {
+  const entry = document.querySelector(`.video-entry[data-id="${id}"]`);
+  if (entry) entry.remove();
+}
+
+function todayStr() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+// ── Collect all video entries ──────────────────────────────────────────────
+function collectVideoEntries() {
+  const entries = document.querySelectorAll('.video-entry');
+  const result = [];
+  for (const entry of entries) {
+    const id = entry.dataset.id;
+    const fileInput = document.getElementById(`videoFile_${id}`);
+    const dateInput = document.getElementById(`videoDate_${id}`);
+    const ageInput  = document.getElementById(`videoAge_${id}`);
+    if (!fileInput.files.length) continue;
+    result.push({
+      file: fileInput.files[0],
+      date: dateInput.value,
+      age: ageInput.value,
+    });
+  }
+  return result;
+}
+
+// ── Validate form ──────────────────────────────────────────────────────────
+function validate() {
+  const name = document.getElementById('subjectName').value.trim();
+  if (!name) return '请填写姓名 / ID';
+
+  const faceInput = document.getElementById('anchorFace');
+  if (!faceInput.files.length) return '请上传锚点照片';
+
+  const voiceInput = document.getElementById('anchorVoice');
+  if (!voiceInput.files.length) return '请上传锚点声音';
+
+  const videos = collectVideoEntries();
+  if (!videos.length) return '请至少添加一条视频样本';
+  for (const v of videos) {
+    if (!v.date) return '视频缺少拍摄日期';
+    if (!v.age) return '视频缺少拍摄时年龄';
+  }
+  return null;
+}
+
+// ── Run button ─────────────────────────────────────────────────────────────
+document.getElementById('runBtn').addEventListener('click', runAnalysis);
+
+async function runAnalysis() {
+  const err = validate();
+  if (err) { showStatus('error', err); return; }
+
+  setRunning(true);
+  showStatus('info', '<span class="spinner"></span>正在处理，请耐心等待（预处理和模型推理可能需要数分钟）…');
+  hideResults();
+
+  try {
+    const fd = new FormData();
+    fd.append('subject_name', document.getElementById('subjectName').value.trim());
+    fd.append('anchor_face', document.getElementById('anchorFace').files[0]);
+    fd.append('anchor_voice', document.getElementById('anchorVoice').files[0]);
+    fd.append('include_skin_disease', document.getElementById('includeSkinDisease').checked);
+    fd.append('face_threshold', document.getElementById('faceThreshold').value);
+    fd.append('voice_threshold', document.getElementById('voiceThreshold').value);
+
+    const videos = collectVideoEntries();
+    for (const v of videos) {
+      fd.append('videos', v.file);
+      fd.append('dates', v.date);
+      fd.append('ages', v.age);
+    }
+
+    const resp = await fetch('/api/workflow/analyze', { method: 'POST', body: fd });
+    const data = await resp.json();
+
+    if (!resp.ok) {
+      throw new Error(data.detail || `HTTP ${resp.status}`);
+    }
+
+    renderResults(data);
+    showStatus('success', `✓ 分析完成 — ${data.points.length} 个时间点`);
+
+  } catch (e) {
+    showStatus('error', `❌ 错误：${e.message}`);
+  } finally {
+    setRunning(false);
+  }
+}
+
+// ── Render results ─────────────────────────────────────────────────────────
+function renderResults(data) {
+  document.getElementById('emptyState').style.display = 'none';
+
+  const subject = data.subject_name || '未知';
+  document.getElementById('subjectLabel').textContent = subject;
+
+  const points = data.points || [];
+
+  // Chart
+  renderChart(points);
+
+  // Per-sample cards
+  const list = document.getElementById('pointList');
+  list.innerHTML = '';
+  for (const pt of points) {
+    list.appendChild(buildPointCard(pt));
+  }
+}
+
+function renderChart(points) {
+  const chartCard = document.getElementById('chartCard');
+  chartCard.style.display = '';
+
+  const labels = points.map(p => p.captured_at.slice(0, 10));
+  const estimates = points.map(p => p.remaining_life_estimate >= 0 ? p.remaining_life_estimate : null);
+  const lows = points.map(p => p.uncertainty_low);
+  const highs = points.map(p => p.uncertainty_high);
+
+  // Build error bar data: [{x, y, yMin, yMax}]
+  const mainData = points.map((p, i) => ({
+    x: labels[i],
+    y: estimates[i],
+    yMin: lows[i],
+    yMax: highs[i],
+  }));
+
+  if (chart) { chart.destroy(); chart = null; }
+
+  const ctx = document.getElementById('lifetimeChart').getContext('2d');
+  chart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: '剩余寿命估计（年）',
+          data: estimates,
+          borderColor: '#3b82f6',
+          backgroundColor: 'rgba(59,130,246,0.1)',
+          pointRadius: 5,
+          pointBackgroundColor: '#3b82f6',
+          tension: 0.3,
+          fill: false,
+        },
+        {
+          label: '不确定性上界',
+          data: highs,
+          borderColor: 'rgba(59,130,246,0.2)',
+          backgroundColor: 'rgba(59,130,246,0.08)',
+          pointRadius: 0,
+          borderDash: [4, 4],
+          fill: '+1',
+          tension: 0.3,
+        },
+        {
+          label: '不确定性下界',
+          data: lows,
+          borderColor: 'rgba(59,130,246,0.2)',
+          backgroundColor: 'rgba(59,130,246,0.08)',
+          pointRadius: 0,
+          borderDash: [4, 4],
+          fill: false,
+          tension: 0.3,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          display: true,
+          labels: { boxWidth: 12, font: { size: 12 } },
+        },
+        tooltip: {
+          callbacks: {
+            label: ctx => {
+              const pt = points[ctx.dataIndex];
+              if (!pt) return '';
+              const est = pt.remaining_life_estimate >= 0 ? pt.remaining_life_estimate.toFixed(1) : '—';
+              return `估计：${est} 年  [${pt.uncertainty_low.toFixed(1)}–${pt.uncertainty_high.toFixed(1)}]`;
+            },
+          },
+        },
+      },
+      scales: {
+        x: { title: { display: true, text: '拍摄日期' } },
+        y: {
+          title: { display: true, text: '剩余寿命（年）' },
+          beginAtZero: true,
+        },
+      },
+    },
+  });
+}
+
+function buildPointCard(pt) {
+  const card = document.createElement('div');
+  card.className = 'timeline-point-card card';
+
+  const est = pt.remaining_life_estimate >= 0 ? pt.remaining_life_estimate.toFixed(1) : '—';
+  const low = pt.uncertainty_low.toFixed(1);
+  const high = pt.uncertainty_high.toFixed(1);
+  const date = pt.captured_at.slice(0, 10);
+  const age = pt.age_at_capture;
+
+  const factors = (pt.key_factors || [])
+    .map(f => `<span class="factor-tag">${escHtml(f)}</span>`)
+    .join('');
+
+  card.innerHTML = `
+    <div class="pt-date">${date}（时年 ${age} 岁）</div>
+    <div>
+      <span class="pt-estimate">${est} 年</span>
+      <span class="pt-range">不确定区间：${low}–${high} 年</span>
+    </div>
+    ${pt.summary ? `<div class="pt-summary">${escHtml(pt.summary)}</div>` : ''}
+    ${factors ? `<div class="pt-factors">${factors}</div>` : ''}
+  `;
+  return card;
+}
+
+// ── UI helpers ─────────────────────────────────────────────────────────────
+function setRunning(running) {
+  const btn = document.getElementById('runBtn');
+  const icon = document.getElementById('runBtnIcon');
+  const text = document.getElementById('runBtnText');
+  btn.disabled = running;
+  if (running) {
+    icon.innerHTML = '<span class="spinner"></span>';
+    text.textContent = '分析中…';
+  } else {
+    icon.textContent = '▶';
+    text.textContent = '开始分析';
+  }
+}
+
+function showStatus(type, msg) {
+  const bar = document.getElementById('statusBar');
+  bar.className = `status-bar ${type}`;
+  bar.innerHTML = msg;
+}
+
+function hideResults() {
+  document.getElementById('chartCard').style.display = 'none';
+  document.getElementById('pointList').innerHTML = '';
+  document.getElementById('emptyState').style.display = '';
+  if (chart) { chart.destroy(); chart = null; }
+}
+
+function escHtml(s) {
+  return String(s).replace(/[&<>"']/g, c =>
+    ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c])
+  );
+}
+</script>
+</body>
+</html>
